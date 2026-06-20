@@ -38,8 +38,8 @@ jobs:
             cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
             pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
           
-          # Khắc phục lỗi phân quyền fakeroot trên môi trường Ubuntu mới
-          sudo update-alternatives --set fakeroot /usr/bin/fakeroot-tcp || true
+          # Thiết lập fakeroot-sysv làm mặc định (Sửa triệt để lỗi Connection refused của fakeroot-tcp)
+          sudo update-alternatives --set fakeroot /usr/bin/fakeroot-sysv || true
 
       - name: Setup Go
         uses: actions/setup-go@v5
