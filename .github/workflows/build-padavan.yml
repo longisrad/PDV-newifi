@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          cache: false # Tắt cảnh báo cache
 
       - name: Prepare Config
         run: |
@@ -57,9 +58,25 @@ jobs:
       - name: Build Toolchain from Source
         run: |
           cd /opt/rt-n56u/toolchain-mipsel
-          # Làm sạch các nguồn cũ và bắt đầu biên dịch chéo toolchain từ đầu
-          ./clean_sources
-          ./build_toolchain
+          
+          # Tự động dò tìm file clean trong repo của bạn
+          if [ -f "./clean_toolchain" ]; then
+            ./clean_toolchain
+          elif [ -f "./clean_sources" ]; then
+            ./clean_sources
+          else
+            echo "Không tìm thấy file clean_toolchain hay clean_sources, bỏ qua..."
+          fi
+          
+          # Tự động dò tìm file build toolchain trong repo của bạn
+          if [ -f "./build_toolchain" ]; then
+            ./build_toolchain
+          elif [ -f "./build_toolchain_3.4.x" ]; then
+            ./build_toolchain_3.4.x
+          else
+            echo "Không tìm thấy file build_toolchain hay build_toolchain_3.4.x!"
+            exit 1
+          fi
 
       - name: Build Firmware
         run: |
