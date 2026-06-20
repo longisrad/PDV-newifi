@@ -1,4 +1,4 @@
-name: Build Padavan NEWIFI3
+name: Build Padavan NEWIFI3 (Tự biên dịch Toolchain)
 
 on:
   workflow_dispatch: # Cho phép chạy thủ công từ tab Actions
@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo mkdir -p /opt/rt-n56u
           sudo chown -R runner:runner /opt/rt-n56u
-          # Di chuyển toàn bộ mã nguồn chứa các tính năng tùy biến của bạn sang thư mục /opt/rt-n56u
+          # Di chuyển toàn bộ mã nguồn của bạn sang thư mục /opt/rt-n56u để khớp đường dẫn hệ thống
           mv rt-n56u-src/* /opt/rt-n56u/ || true
           mv rt-n56u-src/.* /opt/rt-n56u/ 2>/dev/null || true
 
@@ -48,20 +48,18 @@ jobs:
 
       - name: Prepare Config
         run: |
-          # Sao chép file cấu hình NEWIFI3.config của bạn vào đúng vị trí templates để chuẩn bị build
-          cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config
+          # Copy cấu hình của bạn vào các file mẫu cấu hình tương ứng của Newifi 3
+          cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config || true
+          cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI-D2.config || true
+          cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
 
-      - name: Prepare Toolchain
+      - name: Build Toolchain from Source
         run: |
           cd /opt/rt-n56u/toolchain-mipsel
-          if [ -f dl_toolchain.sh ]; then
-            sh dl_toolchain.sh
-          else
-            echo "Không tìm thấy dl_toolchain.sh, tiến hành tải prebuilt toolchain..."
-            mkdir -p toolchain-3.4.x
-            wget -qO- https://github.com/hanwckf/padavan-toolchain/releases/download/v1.1/mipsel-linux-uclibc.tar.xz | tar -xJ -C toolchain-3.4.x
-          fi
+          # Làm sạch các nguồn cũ và bắt đầu biên dịch chéo toolchain từ đầu
+          ./clean_sources
+          ./build_toolchain
 
       - name: Build Firmware
         run: |
@@ -104,6 +102,7 @@ jobs:
             ### Padavan Firmware dành cho Newifi 3 (D2)
             - **Thời gian biên dịch:** `${{ steps.prepare_files.outputs.compile_date }}`
             - **Cấu hình sử dụng:** `NEWIFI3.config` từ repo của bạn.
+            - **Trạng thái:** Toolchain được biên dịch tự động hoàn toàn từ đầu (from source).
             
             *Mã nguồn được biên dịch tự động bằng GitHub Actions từ repo của bạn.*
           files: |
