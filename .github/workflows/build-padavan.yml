@@ -1,0 +1,98 @@
+name: Build Padavan NEWIFI3
+
+on:
+  workflow_dispatch: # Cho phép bạn kích hoạt build thủ công từ tab Actions
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'NEWIFI3.config' # Tự động build khi bạn thay đổi file cấu hình này
+
+permissions:
+  contents: write # Cần thiết để tạo Release và upload file lên GitHub Releases
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
+            cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
+            pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Prepare Source & Config
+        run: |
+          # Kiểm tra xem repo hiện tại có sẵn mã nguồn Padavan không
+          if [ ! -d "trunk" ]; then
+            echo "Không tìm thấy mã nguồn Padavan trong repo này. Tiến hành clone từ hanwckf/rt-n56u..."
+            git clone --depth=1 https://github.com/hanwckf/rt-n56u.git padavan-src
+            
+            # Copy config từ thư mục gốc vào mã nguồn vừa tải về
+            cp -f NEWIFI3.config padavan-src/trunk/configs/templates/NEWIFI3.config
+            cp -f NEWIFI3.config padavan-src/trunk/.config
+            echo "SRC_DIR=padavan-src" >> $GITHUB_ENV
+          else
+            echo "Đã tìm thấy mã nguồn Padavan trong repo hiện tại."
+            cp -f NEWIFI3.config trunk/configs/templates/NEWIFI3.config
+            cp -f NEWIFI3.config trunk/.config
+            echo "SRC_DIR=." >> $GITHUB_ENV
+          fi
+
+      - name: Prepare Toolchain
+        run: |
+          cd ${{ env.SRC_DIR }}/toolchain-mipsel
+          if [ -f dl_toolchain.sh ]; then
+            sh dl_toolchain.sh # Tải toolchain đã dựng sẵn để tiết kiệm thời gian (khoảng 2-3 phút)
+          else
+            echo "Không tìm thấy dl_toolchain.sh, tiến hành tự biên dịch toolchain (mất khoảng 30-40 phút)..."
+            ./clean_sources
+            ./build_toolchain
+          fi
+
+      - name: Build Firmware
+        run: |
+          cd ${{ env.SRC_DIR }}/trunk
+          ./clear_tree
+          ./make_firmware NEWIFI3
+
+      - name: Prepare Release Metadata
+        id: prepare_files
+        run: |
+          echo "release_tag=NEWIFI3-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
+          echo "compile_date=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Padavan-NEWIFI3-Firmware
+          path: |
+            ${{ env.SRC_DIR }}/trunk/images/*.trx
+            ${{ env.SRC_DIR }}/trunk/images/*.md5
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: ${{ steps.prepare_files.outputs.release_tag }}
+          name: NEWIFI3 Padavan Firmware [${{ steps.prepare_files.outputs.compile_date }}]
+          body: |
+            ### Padavan Firmware dành cho Newifi 3 (D2)
+            - **Thời gian biên dịch:** `${{ steps.prepare_files.outputs.compile_date }}`
+            - **Cấu hình sử dụng:** `NEWIFI3.config` từ gốc thư mục repo.
+            
+            *Sản phẩm được biên dịch tự động bằng GitHub Actions.*
+          files: |
+            ${{ env.SRC_DIR }}/trunk/images/*.trx
