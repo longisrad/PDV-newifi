@@ -55,6 +55,12 @@ jobs:
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
 
+          # VÔ HIỆU HÓA CÁC DÒNG ÉP BUỘC CẤU HÌNH TRONG FILE build_firmware_modify CỦA BẠN:
+          # 1. Thêm dấu # trước các dòng echo "CONFIG_FIRMWARE_... >> .config"
+          sed -i 's/^[[:space:]]*echo "CONFIG_FIRMWARE_/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
+          # 2. Thêm dấu # trước các dòng "sed -i" nhắm vào file ".config" để tránh sửa cấu hình ngoài ý muốn
+          sed -i '/\.config/s/^[[:space:]]*sed -i/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
+
       - name: Build Toolchain from Source
         run: |
           cd /opt/rt-n56u/toolchain-mipsel
