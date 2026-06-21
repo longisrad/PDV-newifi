@@ -38,8 +38,12 @@ function initial(){
 }
 
 function change_sqm_enabled(){
-	var enabled = document.getElementById('sqm_enable_1').checked;
-	showhide_div('sqm_settings', enabled ? 1 : 0);
+	var el = document.getElementById('sqm_enable_1');
+	var enabled = el ? el.checked : false;
+	var el0 = document.getElementById('sqm_enable_0');
+	var disabled = el0 ? el0.checked : false;
+	// Chỉ ẩn khi explicitly chọn Off, mặc định hiện
+	showhide_div('sqm_settings', disabled ? 0 : 1);
 }
 
 function applyRule(){
