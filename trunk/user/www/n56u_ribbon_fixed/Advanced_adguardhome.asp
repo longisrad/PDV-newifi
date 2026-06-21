@@ -158,7 +158,7 @@ function done_validating(action){
 												<select name="adg_redirect" class="input" style="width: 200px">
 													<option value="0" <% nvram_match_x("","adg_redirect", "0","selected"); %>>None</option>
 													<option value="1" <% nvram_match_x("","adg_redirect", "1","selected"); %>>Use as dnsmasq upstream</option>
-													<option value="2" <% nvram_match_x("","adg_redirect", "2","selected"); %>>Redirect port 53 to AdGuard Home</option>
+													<option value="2" <% nvram_match_x("","adg_redirect", "2","selected"); %>>Give port 53 to AdGuard Home</option>
 												</select>
 											</td>
 										</tr>
