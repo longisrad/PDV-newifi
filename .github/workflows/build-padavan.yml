@@ -46,21 +46,19 @@ jobs:
 
       - name: Download AdGuardHome binary
         run: |
-          # Dùng curl -L để follow redirect, không dùng wget
           AGH_URL=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest \
             | grep "browser_download_url" \
             | grep "mipsle_softfloat.tar.gz" \
             | cut -d '"' -f 4)
           echo "Downloading AGH from: $AGH_URL"
-          curl -L -o /tmp/AdGuardHome_linux_mipsle_softfloat.tar.gz "$AGH_URL"
-          mkdir -p /tmp/agh_extract
-          tar -xzf /tmp/AdGuardHome_linux_mipsle_softfloat.tar.gz -C /tmp/agh_extract
-          AGH_BIN=$(find /tmp/agh_extract -name "AdGuardHome" -type f | head -1)
-          echo "Binary size: $(du -h $AGH_BIN | cut -f1)"
-          # Không dùng UPX - gây segfault trên MIPS kernel 3.4
-          cp "$AGH_BIN" /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
-          chmod +x /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
-          echo "AGH binary placed successfully"
+          curl -L -o /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome_linux_mipsle_softfloat.tar.gz "$AGH_URL"
+          echo "Downloaded: $(du -h /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome_linux_mipsle_softfloat.tar.gz | cut -f1)"
+
+      - name: Download CA Certificates for AGH
+        run: |
+          curl -L -o /opt/rt-n56u/trunk/user/adguardhome/ca-certificates.crt \
+            https://curl.se/ca/cacert.pem
+          echo "CA certs: $(du -h /opt/rt-n56u/trunk/user/adguardhome/ca-certificates.crt | cut -f1)"
 
       - name: Prepare Config
         run: |
