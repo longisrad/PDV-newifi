@@ -65,8 +65,8 @@ jobs:
           echo "Found binary: $AGH_BIN ($(du -h $AGH_BIN | cut -f1))"
 
           # UPX compress - dùng --lzma cho chip MIPS để nén dung lượng tối đa
-          upx --lzma "$AGH_BIN" || upx "$AGH_BIN" || echo "UPX failed, using uncompressed"
-          echo "After UPX: $(du -h $AGH_BIN | cut -f1)"
+          #upx --lzma "$AGH_BIN" || upx "$AGH_BIN" || echo "UPX failed, using uncompressed"
+          #echo "After UPX: $(du -h $AGH_BIN | cut -f1)"
 
           # Copy vào đúng vị trí trong thư mục mã nguồn
           cp "$AGH_BIN" /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
