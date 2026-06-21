@@ -46,7 +46,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: false # Tắt cảnh báo cache của Go
+          cache: false # Tắt cảnh báo cache mặc định của Go
 
       - name: Download and compress AdGuardHome binary
         run: |
@@ -64,7 +64,7 @@ jobs:
           AGH_BIN=$(find /tmp/agh_extract -name "AdGuardHome" -type f | head -1)
           echo "Found binary: $AGH_BIN ($(du -h $AGH_BIN | cut -f1))"
 
-          # UPX compress - dùng --lzma cho chip MIPS để nén file tối đa
+          # UPX compress - dùng --lzma cho chip MIPS để nén dung lượng tối đa
           upx --lzma "$AGH_BIN" || upx "$AGH_BIN" || echo "UPX failed, using uncompressed"
           echo "After UPX: $(du -h $AGH_BIN | cut -f1)"
 
@@ -81,7 +81,19 @@ jobs:
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
 
+      # ==========================================
+      # BƯỚC KHỞI TẠO CACHE CHO TOOLCHAIN BIÊN DỊCH
+      # ==========================================
+      - name: Cache Toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /opt/rt-n56u/toolchain-mipsel/toolchain-3.4.x
+          key: ${{ runner.os }}-padavan-toolchain-3.4.x-v1
+
+      # Bước này chỉ chạy nếu KHÔNG tìm thấy cache cũ (cache-hit != 'true')
       - name: Build Toolchain from Source
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           cd /opt/rt-n56u/toolchain-mipsel
           if [ -f "./clean_toolchain" ]; then
@@ -134,4 +146,12 @@ jobs:
           tag_name: ${{ steps.prepare_files.outputs.release_tag }}
           name: NEWIFI3 Padavan Firmware [${{ steps.prepare_files.outputs.compile_date }}]
           body: |
-            ### Padavan Firmware
+            ### Padavan Firmware for Newifi 3 (D2)
+            - **Build time:** `${{ steps.prepare_files.outputs.compile_date }}`
+            - **Features:** AdGuardHome + SQM HTB+fq_codel + SMB + FTP + USB
+            - **AGH binary:** mipsle_softfloat, UPX compressed, loaded to RAM on boot
+            - **Config:** NEWIFI3.config from repo
+            
+            *Built automatically with GitHub Actions (Toolchain Cached).*
+          files: |
+            /opt/rt-n56u/trunk/images/*.trx
