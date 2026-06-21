@@ -46,6 +46,7 @@ jobs:
 
       - name: Download AdGuardHome binary
         run: |
+          # Dùng curl -L để follow redirect, không dùng wget
           AGH_URL=$(curl -s https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest \
             | grep "browser_download_url" \
             | grep "mipsle_softfloat.tar.gz" \
@@ -56,8 +57,10 @@ jobs:
           tar -xzf /tmp/AdGuardHome_linux_mipsle_softfloat.tar.gz -C /tmp/agh_extract
           AGH_BIN=$(find /tmp/agh_extract -name "AdGuardHome" -type f | head -1)
           echo "Binary size: $(du -h $AGH_BIN | cut -f1)"
+          # Không dùng UPX - gây segfault trên MIPS kernel 3.4
           cp "$AGH_BIN" /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
           chmod +x /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
+          echo "AGH binary placed successfully"
 
       - name: Prepare Config
         run: |
@@ -65,17 +68,18 @@ jobs:
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI-D2.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
-          sed -i 's/^[[:space:]]*echo "CONFIG_FIRMWARE_/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
-          sed -i '/\.config/s/^[[:space:]]*sed -i/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
+
+      - name: Cache Toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /opt/rt-n56u/toolchain-mipsel/toolchain-3.4.x
+          key: ${{ runner.os }}-padavan-toolchain-3.4.x-v1
 
       - name: Build Toolchain from Source
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           cd /opt/rt-n56u/toolchain-mipsel
-          if [ -f "./clean_toolchain" ]; then
-            ./clean_toolchain
-          elif [ -f "./clean_sources" ]; then
-            ./clean_sources
-          fi
           if [ -f "./build_toolchain" ]; then
             ./build_toolchain
           elif [ -f "./build_toolchain_3.4.x" ]; then
@@ -122,9 +126,9 @@ jobs:
             ### Padavan Firmware for Newifi 3 (D2)
             - **Build time:** `${{ steps.prepare_files.outputs.compile_date }}`
             - **Features:** AdGuardHome + SQM HTB+fq_codel + SMB + FTP + USB
-            - **AGH binary:** mipsle_softfloat, UPX compressed, loaded to RAM on boot
+            - **AGH binary:** mipsle_softfloat, loaded to RAM on boot
             - **Config:** NEWIFI3.config from repo
-            
-            *Built automatically with GitHub Actions.*
+
+            *Built automatically with GitHub Actions (Toolchain Cached).*
           files: |
             /opt/rt-n56u/trunk/images/*.trx
