@@ -1357,6 +1357,10 @@ handle_notifications(void)
 			restart_adguardhome();
 		}
 #endif
+		else if (strcmp(entry->d_name, "restart_sqm") == 0)
+		{
+			restart_sqm();
+		}
 #if defined(APP_SMARTDNS)
 		else if (strcmp(entry->d_name, RCN_RESTART_SMARTDNS) == 0)
 		{
@@ -2036,3 +2040,4 @@ main(int argc, char **argv)
 
 	return ret;
 }
+
