@@ -91,8 +91,8 @@ start_adg() {
     change_dns
     set_iptable
     # Set CA certificates để AGH verify HTTPS khi download blocklists
-    export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-    export SSL_CERT_DIR=/etc/ssl/certs
+    export SSL_CERT_FILE=/etc_ro/ca-certificates.crt
+    
     logger -t "AdGuardHome" "Starting AdGuardHome..."
     if [ -f "$AGH_CFG" ] && [ -s "$AGH_CFG" ]; then
         "$AGH_BIN" -c "$AGH_CFG" -w "$AGH_TMP" --no-check-update &
