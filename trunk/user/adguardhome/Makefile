@@ -17,5 +17,5 @@ romfs:
 	# Copy script
 	$(ROMFSINST) -p +x $(THISDIR)/adguardhome.sh /usr/bin/adguardhome.sh
 	# Tạo thư mục và copy chứng chỉ CA cho AGH update blocklist
-	mkdir -p $(ROMFSDIR)/etc/ssl/certs
+	mkdir -p $(ROMFS_DIR)/etc/ssl/certs
 	$(ROMFSINST) $(THISDIR)/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
