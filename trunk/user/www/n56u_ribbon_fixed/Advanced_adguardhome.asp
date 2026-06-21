@@ -165,7 +165,7 @@ function done_validating(action){
 										<tr>
 											<th>Web Admin Panel:</th>
 											<td>
-											<a href="http://<% nvram_get_x("", "lan_ipaddr"); %>:3030">http://<% nvram_get_x("", "lan_ipaddr"); %>:3030</a>
+											<a href="http://<% nvram_get_x("", "lan_ipaddr"); %>:3000">http://<% nvram_get_x("", "lan_ipaddr"); %>:3000</a>
 											</td>
 										</tr>
 										
