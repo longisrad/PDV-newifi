@@ -1,8 +1,8 @@
 #!/bin/sh
 
-AGH_BIN_SRC="/usr/bin/AdGuardHome"   # binary UPX trong firmware
-AGH_TMP="/tmp/AdGuardHome"            # thư mục RAM
-AGH_BIN="$AGH_TMP/AdGuardHome"       # binary sau khi copy ra RAM
+AGH_BIN_SRC="/usr/bin/AdGuardHome"   # binary trong firmware, chạy thẳng
+AGH_TMP="/etc/storage/AdGuardHome"   # work dir - persist qua reboot, đủ space
+AGH_BIN="$AGH_BIN_SRC"               # chạy thẳng từ squashfs, không copy ra RAM
 AGH_CFG="/etc/storage/AdGuardHome/AdGuardHome.yaml"  # config persist qua reboot
 
 change_dns() {
@@ -55,15 +55,12 @@ clear_iptable() {
 
 load_binary() {
     if [ ! -f "$AGH_BIN_SRC" ]; then
-        logger -t "AdGuardHome" "ERROR: Binary not found in firmware at $AGH_BIN_SRC"
+        logger -t "AdGuardHome" "ERROR: Binary not found at $AGH_BIN_SRC"
         nvram set adg_enable=0
         exit 1
     fi
     mkdir -p "$AGH_TMP"
-    logger -t "AdGuardHome" "Loading binary from firmware to RAM..."
-    cp "$AGH_BIN_SRC" "$AGH_BIN"
-    chmod 755 "$AGH_BIN"
-    logger -t "AdGuardHome" "Binary loaded to RAM successfully"
+    logger -t "AdGuardHome" "Running binary directly from firmware (no RAM copy needed)"
 }
 
 getconfig() {
