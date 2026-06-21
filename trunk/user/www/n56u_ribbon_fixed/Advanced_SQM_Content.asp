@@ -24,7 +24,8 @@
 <script>
 var $j = jQuery.noConflict();
 $j(document).ready(function() {
-	init_itoggle('sqm_enable');
+	init_itoggle('sqm_enable', change_sqm_enabled);
+	change_sqm_enabled();
 });
 </script>
 <script>
@@ -34,7 +35,6 @@ function initial(){
 	show_banner(2);
 	show_menu(5,21);
 	show_footer();
-	change_sqm_enabled();
 }
 
 function change_sqm_enabled(){
