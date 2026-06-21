@@ -90,13 +90,14 @@ start_adg() {
     getconfig
     change_dns
     set_iptable
+    # Set CA certificates để AGH verify HTTPS khi download blocklists
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    export SSL_CERT_DIR=/etc/ssl/certs
     logger -t "AdGuardHome" "Starting AdGuardHome..."
     if [ -f "$AGH_CFG" ] && [ -s "$AGH_CFG" ]; then
-        # Config exists - run normally
         "$AGH_BIN" -c "$AGH_CFG" -w "$AGH_TMP" --no-check-update &
         logger -t "AdGuardHome" "AdGuardHome started with config (PID: $!)"
     else
-        # First run - let AGH run setup wizard on port 3000
         "$AGH_BIN" -w "$AGH_TMP" --no-check-update &
         logger -t "AdGuardHome" "AdGuardHome started in setup mode port 3000 (PID: $!)"
     fi
