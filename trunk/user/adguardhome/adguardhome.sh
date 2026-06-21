@@ -6,7 +6,9 @@ AGH_BIN="$AGH_BIN_SRC"               # chạy thẳng từ squashfs, không copy
 AGH_CFG="/etc/storage/AdGuardHome/AdGuardHome.yaml"  # config persist qua reboot
 
 change_dns() {
-    if [ "$(nvram get adg_redirect)" = "1" ]; then
+    local mode="$(nvram get adg_redirect)"
+    if [ "$mode" = "1" ]; then
+        # Mode 1: dnsmasq forward lên AGH port 5335
         sed -i '/no-resolv/d' /etc/storage/dnsmasq/dnsmasq.conf
         sed -i '/server=127.0.0.1#5335/d' /etc/storage/dnsmasq/dnsmasq.conf
         cat >> /etc/storage/dnsmasq/dnsmasq.conf << EOF
@@ -14,13 +16,20 @@ no-resolv
 server=127.0.0.1#5335
 EOF
         /sbin/restart_dhcpd
-        logger -t "AdGuardHome" "DNS forwarding to port 5335"
+        logger -t "AdGuardHome" "DNS: dnsmasq forwarding to AGH port 5335"
+    elif [ "$mode" = "2" ]; then
+        # Mode 2: tắt dnsmasq DNS listener, AGH listen port 53 trực tiếp
+        sed -i '/^port=/d' /etc/storage/dnsmasq/dnsmasq.conf
+        echo "port=0" >> /etc/storage/dnsmasq/dnsmasq.conf
+        /sbin/restart_dhcpd
+        logger -t "AdGuardHome" "DNS: dnsmasq port disabled, AGH takes port 53"
     fi
 }
 
 del_dns() {
     sed -i '/no-resolv/d' /etc/storage/dnsmasq/dnsmasq.conf
     sed -i '/server=127.0.0.1#5335/d' /etc/storage/dnsmasq/dnsmasq.conf
+    sed -i '/^port=0/d' /etc/storage/dnsmasq/dnsmasq.conf
     /sbin/restart_dhcpd
 }
 
@@ -98,7 +107,9 @@ stop_adg() {
     killall -9 AdGuardHome 2>/dev/null
     del_dns
     clear_iptable
-    rm -rf "$AGH_TMP"
+    # Không xóa AGH_TMP vì chứa config và data
+    # Chỉ xóa lock/pid files nếu có
+    rm -f "$AGH_TMP"/*.pid 2>/dev/null
     logger -t "AdGuardHome" "AdGuardHome stopped"
 }
 
