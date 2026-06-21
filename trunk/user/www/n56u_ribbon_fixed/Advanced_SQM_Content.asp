@@ -34,7 +34,7 @@ $j(document).ready(function() {
 
 function initial() {
 	show_banner(1);
-	show_menu(7, 21, 1);
+	show_menu(7, 24, 1);
 	show_footer();
 	load_body();
 	change_sqm_enabled();
@@ -236,7 +236,7 @@ function done_validating(action) {
 							<tr>
 								<td colspan="2">
 									<pre id="sqm_status" style="font-size: 11px; background: #f5f5f5; padding: 8px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
-<% sqm_status_hook(); %>
+Run "sqm.sh status" via SSH to check
 									</pre>
 								</td>
 							</tr>
