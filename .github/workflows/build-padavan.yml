@@ -1,13 +1,13 @@
 name: Build Padavan NEWIFI3
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Cho phép chạy thủ công từ tab Actions
   push:
     branches:
       - main
       - master
     paths:
-      - 'NEWIFI3.config'
+      - 'NEWIFI3.config' # Tự động chạy khi file config thay đổi
 
 permissions:
   contents: write
@@ -19,12 +19,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          path: rt-n56u-src
+          path: rt-n56u-src # Tải mã nguồn từ chính repo của bạn về thư mục tạm
 
       - name: Move repository to /opt/rt-n56u
         run: |
           sudo mkdir -p /opt/rt-n56u
           sudo chown -R runner:runner /opt/rt-n56u
+          # Di chuyển toàn bộ mã nguồn của bạn sang thư mục /opt/rt-n56u để khớp đường dẫn hệ thống
           mv rt-n56u-src/* /opt/rt-n56u/ || true
           mv rt-n56u-src/.* /opt/rt-n56u/ 2>/dev/null || true
 
@@ -37,13 +38,15 @@ jobs:
             cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
             pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin \
             upx-ucl
+          
+          # Thiết lập fakeroot-sysv làm mặc định để biên dịch ổn định trên Ubuntu 22.04
           sudo update-alternatives --set fakeroot /usr/bin/fakeroot-sysv || true
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: false
+          cache: false # Tắt cảnh báo cache của Go
 
       - name: Download and compress AdGuardHome binary
         run: |
@@ -61,23 +64,22 @@ jobs:
           AGH_BIN=$(find /tmp/agh_extract -name "AdGuardHome" -type f | head -1)
           echo "Found binary: $AGH_BIN ($(du -h $AGH_BIN | cut -f1))"
 
-          # UPX compress - dùng --lzma cho MIPS, tránh lỗi
+          # UPX compress - dùng --lzma cho chip MIPS để nén file tối đa
           upx --lzma "$AGH_BIN" || upx "$AGH_BIN" || echo "UPX failed, using uncompressed"
           echo "After UPX: $(du -h $AGH_BIN | cut -f1)"
 
-          # Copy vào đúng vị trí trong source
+          # Copy vào đúng vị trí trong thư mục mã nguồn
           cp "$AGH_BIN" /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
           chmod +x /opt/rt-n56u/trunk/user/adguardhome/AdGuardHome
           echo "AGH binary placed at trunk/user/adguardhome/AdGuardHome"
 
       - name: Prepare Config
         run: |
+          # Áp dụng file cấu hình NEWIFI3.config ngoài thư mục gốc vào các vị trí templates của mã nguồn
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI-D2.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
-          sed -i 's/^[[:space:]]*echo "CONFIG_FIRMWARE_/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
-          sed -i '/\.config/s/^[[:space:]]*sed -i/# &/' /opt/rt-n56u/trunk/build_firmware_modify || true
 
       - name: Build Toolchain from Source
         run: |
@@ -87,6 +89,7 @@ jobs:
           elif [ -f "./clean_sources" ]; then
             ./clean_sources
           fi
+          
           if [ -f "./build_toolchain" ]; then
             ./build_toolchain
           elif [ -f "./build_toolchain_3.4.x" ]; then
@@ -100,6 +103,7 @@ jobs:
         run: |
           cd /opt/rt-n56u/trunk
           ./clear_tree
+          
           if [ -f "./build_firmware_modify" ]; then
             fakeroot ./build_firmware_modify NEWIFI3
           elif [ -f "./build_firmware" ]; then
@@ -130,12 +134,4 @@ jobs:
           tag_name: ${{ steps.prepare_files.outputs.release_tag }}
           name: NEWIFI3 Padavan Firmware [${{ steps.prepare_files.outputs.compile_date }}]
           body: |
-            ### Padavan Firmware for Newifi 3 (D2)
-            - **Build time:** `${{ steps.prepare_files.outputs.compile_date }}`
-            - **Features:** AdGuardHome + SQM HTB+fq_codel + SMB + FTP + USB
-            - **AGH binary:** mipsle_softfloat, UPX compressed, loaded to RAM on boot
-            - **Config:** NEWIFI3.config from repo
-            
-            *Built automatically with GitHub Actions.*
-          files: |
-            /opt/rt-n56u/trunk/images/*.trx
+            ### Padavan Firmware
