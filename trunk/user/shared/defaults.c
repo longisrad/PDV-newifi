@@ -497,16 +497,6 @@ struct nvram_pair router_defaults[] = {
 	{ "w_adbyby", "1" },
 	{ "w_pdnsd", "1" },
 
-	/* SQM QoS - HTB + fq_codel */
-	{ "sqm_enable", "0" },
-	{ "sqm_enabled", "0" },
-	{ "sqm_iface", "eth3" },
-	{ "sqm_down", "90000" },
-	{ "sqm_up", "45000" },
-	{ "sqm_qdisc", "HTB + fq_codel" },
-	{ "sqm_overhead", "0" },
-	{ "sqm_settings", "" },
-
 	{ "ip6_service", "" },
 	{ "ip6_ppe_on", "0" },
 	{ "ip6_wan_if", "0" },
@@ -724,7 +714,7 @@ struct nvram_pair router_defaults[] = {
 	{ "v2_tls", "0" },
 	{ "v2_mux", "0" },
 	
-	/*SS 🔮*/
+	/*SS 订阅*/
 	{ "ss_list", "0" },
 	{ "d_server", "" },
 	{ "d_port", "" },
@@ -754,6 +744,12 @@ struct nvram_pair router_defaults[] = {
 	/* AdguargHome */
 	{ "adg_enable", "0" },
 	{ "adg_redirect", "0" },
+	{ "sqm_enable", "0" },
+	{ "sqm_iface", "eth3" },
+	{ "sqm_down", "90000" },
+	{ "sqm_up", "45000" },
+	{ "sqm_qdisc", "fq_codel" },
+	{ "sqm_overhead", "0" },
 	
 	/*caddy*/
 	{ "caddy_enable", "0" },
