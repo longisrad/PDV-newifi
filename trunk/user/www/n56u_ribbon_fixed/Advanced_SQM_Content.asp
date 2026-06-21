@@ -33,8 +33,8 @@ $j(document).ready(function() {
 <% login_state_hook(); %>
 
 function initial() {
-	show_banner(1);
-	show_menu(7, 24, 1);
+	show_banner(2);
+	show_menu(5, 21);
 	show_footer();
 	load_body();
 	change_sqm_enabled();
