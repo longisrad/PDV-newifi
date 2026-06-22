@@ -103,9 +103,9 @@ jobs:
           cd /opt/rt-n56u/trunk
           ./clear_tree
           
-          # Vá lỗi biên dịch fq_codel trên nhân 3.4 bằng cách chèn tự động thư viện <net/flow_keys.h> ở dòng đầu tiên
-          # Lệnh này bắt buộc phải chạy SAU ./clear_tree để không bị quét sạch mất file đã vá
-          sed -i '1s/^/#include <net\/flow_keys.h>\n/' linux-3.4.x/net/sched/sch_fq_codel.c
+          # Vá lỗi biên dịch fq_codel trên nhân 3.4 bằng cách chèn tự động thư viện <net/flow_keys.h>
+          # Lệnh này chạy sau ./clear_tree và chèn chính xác sau thư viện skbuff.h để nạp đủ kiểu dữ liệu __be32, u8
+          sed -i 's|#include <linux/skbuff.h>|#include <linux/skbuff.h>\n#include <net/flow_keys.h>|' linux-3.4.x/net/sched/sch_fq_codel.c
           
           if [ -f "./build_firmware_modify" ]; then
             fakeroot ./build_firmware_modify NEWIFI3
