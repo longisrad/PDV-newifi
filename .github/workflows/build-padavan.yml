@@ -71,9 +71,6 @@ jobs:
           # 1. Chép tạm file kernel-3.4.x.config vào thư mục chạy cấu hình của linux-3.4.x
           cp -f /opt/rt-n56u/kernel-3.4.x.config /opt/rt-n56u/trunk/linux-3.4.x/.config
           
-          # Vá lỗi biên dịch fq_codel trên nhân 3.4 bằng cách chèn tự động thư viện <net/flow_keys.h> vào sch_fq_codel.c trước khi build
-          sed -i 's|#include <linux/skbuff.h>|#include <linux/skbuff.h>\n#include <net/flow_keys.h>|' /opt/rt-n56u/trunk/linux-3.4.x/net/sched/sch_fq_codel.c
-          
           # 2. Tự động điền các tùy chọn QoS con còn thiếu để tránh treo build (NEW aborted)
           cd /opt/rt-n56u/trunk/linux-3.4.x
           make ARCH=mips olddefconfig || (yes "" | make ARCH=mips oldconfig)
@@ -105,6 +102,11 @@ jobs:
         run: |
           cd /opt/rt-n56u/trunk
           ./clear_tree
+          
+          # Vá lỗi biên dịch fq_codel trên nhân 3.4 bằng cách chèn tự động thư viện <net/flow_keys.h> ở dòng đầu tiên
+          # Lệnh này bắt buộc phải chạy SAU ./clear_tree để không bị quét sạch mất file đã vá
+          sed -i '1s/^/#include <net\/flow_keys.h>\n/' linux-3.4.x/net/sched/sch_fq_codel.c
+          
           if [ -f "./build_firmware_modify" ]; then
             fakeroot ./build_firmware_modify NEWIFI3
           elif [ -f "./build_firmware" ]; then
