@@ -26,9 +26,6 @@
 #include <net/flow_keys.h>
 #include <net/codel.h>
 
-/* Khai báo thủ công prototype của skb_flow_dissect để tránh lỗi biên dịch trên nhân 3.4 */
-extern bool skb_flow_dissect(const struct sk_buff *skb, struct flow_keys *flow);
-
 /*	Fair Queue CoDel.
  *
  * Principles :
