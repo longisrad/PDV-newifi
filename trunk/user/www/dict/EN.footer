@@ -1874,5 +1874,13 @@ GfwList=GfwList
 Login=Login
 BTN_SHUTDOWN=Shutdown
 JS_shutdown=You need manually power on after shutdown!!! Continue to shutdown?
-
+Web_menu_title=Custom Menu Options
+Web_menu_desc=Disable the menu items you do not want to display on the webpage. Perfect for those with OCD... This option only hides the page from the menu; it does not delete the program.
+Web_menu_traffic=Network Traffic
+Web_menu_sysinfo=System Info
+Web_menu_usbapp=USB Application
+Web_menu_netinfo=Network Info
+Web_menu_syslog=System Log
+Web_menu_ss=Bypass Censorship
+Web_menu_adbyby=Adblock Management
 
