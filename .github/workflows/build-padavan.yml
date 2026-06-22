@@ -62,20 +62,13 @@ jobs:
 
       - name: Prepare Config
         run: |
-          # Sao chép file cấu hình bo mạch mẫu
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI-D2.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
-          
-          # 1. Chép tạm file kernel-3.4.x.config vào thư mục chạy cấu hình của linux-3.4.x
           cp -f /opt/rt-n56u/kernel-3.4.x.config /opt/rt-n56u/trunk/linux-3.4.x/.config
-          
-          # 2. Tự động điền các tùy chọn QoS con còn thiếu để tránh treo build (NEW aborted)
           cd /opt/rt-n56u/trunk/linux-3.4.x
           make ARCH=mips olddefconfig || (yes "" | make ARCH=mips oldconfig)
-          
-          # 3. Chép ngược file cấu hình nhân đã hoàn thiện về thư mục bo mạch NEWIFI3 thực tế để chuẩn bị build
           cp -f /opt/rt-n56u/trunk/linux-3.4.x/.config /opt/rt-n56u/trunk/configs/boards/NEWIFI3/kernel-3.4.x.config
 
       - name: Cache Toolchain
@@ -102,11 +95,6 @@ jobs:
         run: |
           cd /opt/rt-n56u/trunk
           ./clear_tree
-          
-          # Vá lỗi biên dịch fq_codel trên nhân 3.4 bằng cách chèn tự động thư viện <net/flow_keys.h>
-          # Lệnh này chạy sau ./clear_tree và chèn chính xác sau thư viện skbuff.h để nạp đủ kiểu dữ liệu __be32, u8
-          sed -i 's|#include <linux/skbuff.h>|#include <linux/skbuff.h>\n#include <net/flow_keys.h>|' linux-3.4.x/net/sched/sch_fq_codel.c
-          
           if [ -f "./build_firmware_modify" ]; then
             fakeroot ./build_firmware_modify NEWIFI3
           elif [ -f "./build_firmware" ]; then
