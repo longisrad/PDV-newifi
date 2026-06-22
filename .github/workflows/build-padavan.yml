@@ -8,6 +8,7 @@ on:
       - master
     paths:
       - 'NEWIFI3.config'
+      - 'kernel-3.4.x.config'
 
 permissions:
   contents: write
@@ -62,10 +63,16 @@ jobs:
 
       - name: Prepare Config
         run: |
+          # Sao chép file cấu hình firmware (NEWIFI3.config)
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI-D2.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/newifi3.config || true
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/.config
+
+          # Tự động sao chép file cấu hình nhân Kernel (kernel-3.4.x.config) từ thư mục gốc vào đúng các bo mạch
+          cp -f /opt/rt-n56u/kernel-3.4.x.config /opt/rt-n56u/trunk/configs/boards/NEWIFI3/kernel-3.4.x.config || true
+          cp -f /opt/rt-n56u/kernel-3.4.x.config /opt/rt-n56u/trunk/configs/boards/NEWIFI-D2/kernel-3.4.x.config || true
+          cp -f /opt/rt-n56u/kernel-3.4.x.config /opt/rt-n56u/trunk/configs/boards/newifi3/kernel-3.4.x.config || true
 
       - name: Cache Toolchain
         id: cache-toolchain
@@ -130,3 +137,10 @@ jobs:
             *Built automatically with GitHub Actions (Toolchain Cached).*
           files: |
             /opt/rt-n56u/trunk/images/*.trx
+```eof
+
+### Điểm cải tiến trong file Workflow mới:
+1. **Lắng nghe thay đổi:** Thêm điều kiện `paths:` lắng nghe file `kernel-3.4.x.config`. Mỗi khi bạn commit chỉnh sửa file này ở thư mục gốc, hệ thống sẽ tự động kích hoạt tiến trình build mới.
+2. **Chuẩn bị cấu hình nhân tự động:** Trong bước `Prepare Config`, hệ thống sẽ sao chép tệp tin cấu hình nhân của bạn từ bên ngoài vào đúng các thư mục bo mạch đích trong mã nguồn để biên dịch sạch sẽ[[1](https://www.google.com/url?sa=E&q=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fgrounding-api-redirect%2FAUZIYQE0hCrAMKoKK8fccw_cJVXr2K_Grclgi94UkKM9yVr5ognnsR6WRdVyUGD7BuAM3XV_QxRQdJtdusGrthyIWHOkLuS_37IQJy5GjRFwURD8hF_v8D-auVGA-WJMYOjBouASICjoj6hnA6QNsJ51Tw%3D%3D)].
+
+Bây giờ bạn chỉ cần lưu lại file workflow này, dọn dẹp dòng cấu hình cũ trong `kernel-3.4.x.config` như ở bước trước, và tiến hành chạy build. Mọi tính năng sẽ được tích hợp thành công!
