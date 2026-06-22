@@ -171,6 +171,10 @@ function applyRule(){
 											<span style="color:#888;font-size:11px;">(PPPoE: 8, VDSL: 8-40)</span>
 										</td>
 									</tr>
+								</table>
+								</div>
+
+								<table width="100%" align="center" cellpadding="4" cellspacing="0" class="table">
 									<tr>
 										<td colspan="2" style="border-top: 0 none;">
 											<br />
@@ -178,7 +182,6 @@ function applyRule(){
 										</td>
 									</tr>
 								</table>
-								</div>
 
 								</div>
 							</div>
