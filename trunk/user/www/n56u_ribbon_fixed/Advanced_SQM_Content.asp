@@ -132,9 +132,80 @@ function applyRule(){
 									<tr>
 										<th width="30%">WAN Interface</th>
 										<td>
-											<input type="text" maxlength="16" class="input" size="15" name="sqm_iface"
-												value="<% nvram_get_x("", "sqm_iface"); %>"
-												placeholder="e.g. eth3" />
+											<select class="input" name="sqm_iface" id="sqm_iface_select" style="width: 219px;">
+												<!-- Javascript tự động điền các mạng đang UP vào đây -->
+											</select>
+											<script>
+												function build_dynamic_sqm_interfaces() {
+													// 1. Đọc các cổng mạng đang UP thực tế từ NVRAM
+													var active_wan = '<% nvram_get_x("", "wan0_ifname_t"); %>';      // ppp0 hoặc eth3 đang kết nối Internet
+													var active_phy = '<% nvram_get_x("", "wan0_phy_ifname_t"); %>';  // Cổng vật lý có dây (ví dụ: eth3)
+													var active_apcli = '<% nvram_get_x("", "apcli_ifname"); %>';     // apcli0 hoặc apclii0 khi đang kích sóng
+
+													// Giá trị SQM Interface đang lưu trong cấu hình hiện tại
+													var saved_val = '<% nvram_get_x("", "sqm_iface"); %>';
+
+													// 2. Lọc bỏ các giá trị rỗng và loại bỏ trùng lặp
+													var interfaces = [];
+													
+													if (active_wan && active_wan !== "") {
+														interfaces.push(active_wan);
+													}
+													if (active_phy && active_phy !== "" && interfaces.indexOf(active_phy) === -1) {
+														interfaces.push(active_phy);
+													}
+													if (active_apcli && active_apcli !== "" && interfaces.indexOf(active_apcli) === -1) {
+														interfaces.push(active_apcli);
+													}
+
+													// 3. Dự phòng: Nếu router đang offline (mảng rỗng), nạp danh sách mặc định để người dùng vẫn chọn được
+													if (interfaces.length === 0) {
+														interfaces = ["eth3", "ppp0", "apclii0", "apcli0"];
+													}
+
+													// 4. Đảm bảo giá trị đang lưu (nếu có) luôn xuất hiện trong danh sách
+													if (saved_val && saved_val !== "" && interfaces.indexOf(saved_val) === -1) {
+														interfaces.push(saved_val);
+													}
+
+													// 5. Vẽ các tùy chọn vào Dropbox
+													var select_element = document.getElementById('sqm_iface_select');
+													select_element.options.length = 0; // Xóa sạch các option cũ trước khi tải
+
+													for (var i = 0; i < interfaces.length; i++) {
+														var iface = interfaces[i];
+														var option_text = iface;
+														
+														// Thêm chú thích thân thiện cho từng cổng mạng đang hoạt động
+														if (iface === "eth3") {
+															option_text += " (WAN có dây)";
+														} else if (iface === "ppp0") {
+															option_text += " (PPPoE nhà mạng)";
+														} else if (iface === "apclii0") {
+															option_text += " (Kích sóng 2.4G)";
+														} else if (iface === "apcli0") {
+															option_text += " (Kích sóng 5G)";
+														} else if (iface === active_wan) {
+															option_text += " (WAN đang UP)";
+														}
+
+														var opt = document.createElement('option');
+														opt.value = iface;
+														opt.text = option_text;
+														
+														// Tự động chọn đúng cổng đang lưu trong cấu hình
+														if (iface === saved_val) {
+															opt.selected = true;
+														}
+														select_element.add(opt);
+													}
+												}
+
+												// Tự động chạy khi trang web dựng xong
+												jQuery(document).ready(function() {
+													build_dynamic_sqm_interfaces();
+												});
+											</script>
 										</td>
 									</tr>
 									<tr>
