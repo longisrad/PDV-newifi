@@ -256,6 +256,10 @@ sys_script(char *name)
 	{
 		notify_rc("restart_dms_rescan");
 	}
+	else if (strcmp(name, "restart_sqm") == 0)
+	{
+		notify_rc("restart_sqm");
+	}
 	else if (strstr(scmd, " ") == 0) // no parameter, run script with eval
 	{
 		eval(scmd);
