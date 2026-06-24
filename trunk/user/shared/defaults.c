@@ -750,6 +750,8 @@ struct nvram_pair router_defaults[] = {
 	{ "sqm_up", "45000" },
 	{ "sqm_qdisc", "fq_codel" },
 	{ "sqm_overhead", "0" },
+	{ "sqm_game", "0" },
+	{ "sqm_game_ports", "5000-5060,8001-8002" },
 	
 	/*caddy*/
 	{ "caddy_enable", "0" },
