@@ -60,6 +60,21 @@ jobs:
             https://curl.se/ca/cacert.pem
           echo "CA certs: $(du -h /opt/rt-n56u/trunk/user/adguardhome/ca-certificates.crt | cut -f1)"
 
+      - name: Download and Package Tailscale for System
+        run: |
+          # 1. Tạo thư mục tailscale trong mã nguồn nếu chưa có
+          mkdir -p /opt/rt-n56u/trunk/user/tailscale
+          
+          # 2. Tải bản tailscaled_full tối ưu về từ repo lmq8267
+          wget -q --no-check-certificate -O /opt/rt-n56u/trunk/user/tailscale/tailscaled https://github.com/lmq8267/tailscale/releases/download/v1.94.2/tailscaled_full
+          
+          # 3. Tiến hành đóng gói nén thành tgz trực tiếp tại thư mục làm việc
+          cd /opt/rt-n56u/trunk/user/tailscale
+          tar -zcvf tailscale.tar.gz tailscaled
+          
+          # 4. Dọn dẹp file thô để tiết kiệm bộ nhớ
+          rm -f tailscaled
+
       - name: Prepare Config
         run: |
           cp -f /opt/rt-n56u/NEWIFI3.config /opt/rt-n56u/trunk/configs/templates/NEWIFI3.config || true
