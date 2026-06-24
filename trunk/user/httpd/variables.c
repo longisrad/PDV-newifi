@@ -1215,6 +1215,8 @@
 			{"sqm_up", "", NULL, FALSE},
 			{"sqm_qdisc", "", NULL, FALSE},
 			{"sqm_overhead", "", NULL, FALSE},
+			{"sqm_preset", "", NULL, FALSE},
+			{"sqm_game_ports", "", NULL, FALSE},
 			{"sqm_settings", "", NULL, FALSE},
 			{0,0,0,0}
 		};
