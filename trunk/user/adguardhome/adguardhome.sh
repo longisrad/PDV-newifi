@@ -88,11 +88,15 @@ getconfig() {
     # Tạo thư mục RAM cho stats
     mkdir -p /tmp/adguard-log
 
-    # Chuyển statistics (stats.db) sang RAM - ghi liên tục, bảo vệ NAND
+    # Chuyển statistics (stats.db) và querylog sang RAM - bảo vệ NAND
     # filters/ và sessions.db giữ trong NAND (cần persist qua reboot)
     if grep -q '^statistics:' "$AGH_CFG"; then
         sed -i '/^statistics:/,/^[a-z]/{s|  dir_path: ""|  dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
         logger -t "AdGuardHome" "Statistics dir set to RAM (/tmp/adguard-log)"
+    fi
+    if grep -q '^querylog:' "$AGH_CFG"; then
+        sed -i '/^querylog:/,/^[a-z]/{s|  dir_path: ""|  dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
+        logger -t "AdGuardHome" "Querylog dir set to RAM (/tmp/adguard-log)"
     fi
 
     # Xóa stats.db cũ trong NAND nếu còn tồn tại
