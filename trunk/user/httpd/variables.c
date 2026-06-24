@@ -1500,4 +1500,4 @@
 		{EVM_RESTART_FIREWALL,		EVT_RESTART_FIREWALL,		RCN_RESTART_FIREWALL,	0},
 		{0,0,0,0}
 	};
-Sửa tiếp tệp variables.c này giúp mình, mình thấy trong file gốc này có cả EVM_RESTART_TAILSCALE r thì phải, dòng 715 hay sao á
+
