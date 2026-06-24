@@ -34,7 +34,10 @@ del_dns() {
 }
 
 set_iptable() {
-    if [ "$(nvram get adg_redirect)" = "2" ]; then
+    local mode="$(nvram get adg_redirect)"
+    # Mode 1: dnsmasq forward → AGH port 5335, cần redirect 53→5335 cho client ngoài
+    # Mode 2: AGH giữ thẳng port 53 → KHÔNG redirect, redirect sẽ gây loop/fail
+    if [ "$mode" = "1" ]; then
         IPS="$(ifconfig | grep "inet addr" | grep -v ":127" | grep "Bcast" | awk '{print $2}' | awk -F: '{print $2}')"
         for IP in $IPS; do
             iptables -t nat -A PREROUTING -p tcp -d $IP --dport 53 -j REDIRECT --to-ports 5335 >/dev/null 2>&1
@@ -45,7 +48,9 @@ set_iptable() {
             ip6tables -t nat -A PREROUTING -p tcp -d $IP --dport 53 -j REDIRECT --to-ports 5335 >/dev/null 2>&1
             ip6tables -t nat -A PREROUTING -p udp -d $IP --dport 53 -j REDIRECT --to-ports 5335 >/dev/null 2>&1
         done
-        logger -t "AdGuardHome" "Redirecting port 53 to 5335"
+        logger -t "AdGuardHome" "Mode 1: Redirecting port 53 to AGH port 5335"
+    else
+        logger -t "AdGuardHome" "Mode 2: AGH owns port 53 directly, no redirect needed"
     fi
 }
 
