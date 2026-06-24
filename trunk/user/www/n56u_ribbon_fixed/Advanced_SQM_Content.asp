@@ -25,6 +25,7 @@
 var $j = jQuery.noConflict();
 $j(document).ready(function() {
 	init_itoggle('sqm_enable', change_sqm_enabled);
+	init_itoggle('sqm_game', change_game_priority);
 	change_sqm_enabled();
 });
 </script>
@@ -42,8 +43,13 @@ function change_sqm_enabled(){
 	var enabled = el ? el.checked : false;
 	var el0 = document.getElementById('sqm_enable_0');
 	var disabled = el0 ? el0.checked : false;
-	// Chỉ ẩn khi explicitly chọn Off, mặc định hiện
 	showhide_div('sqm_settings', disabled ? 0 : 1);
+}
+
+function change_game_priority(){
+	var el = document.getElementById('sqm_game_1');
+	var enabled = el ? el.checked : false;
+	showhide_div('game_ports_row', enabled ? 1 : 0);
 }
 
 function applyRule(){
@@ -133,75 +139,38 @@ function applyRule(){
 										<th width="30%">WAN Interface</th>
 										<td>
 											<select class="input" name="sqm_iface" id="sqm_iface_select" style="width: 219px;">
-												<!-- Javascript tự động điền các mạng đang UP vào đây -->
 											</select>
 											<script>
 												function build_dynamic_sqm_interfaces() {
-													// 1. Đọc các cổng mạng đang UP thực tế từ NVRAM
-													var active_wan = '<% nvram_get_x("", "wan0_ifname_t"); %>';      // ppp0 hoặc eth3 đang kết nối Internet
-													var active_phy = '<% nvram_get_x("", "wan0_phy_ifname_t"); %>';  // Cổng vật lý có dây (ví dụ: eth3)
-													var active_apcli = '<% nvram_get_x("", "apcli_ifname"); %>';     // apcli0 hoặc apclii0 khi đang kích sóng
-
-													// Giá trị SQM Interface đang lưu trong cấu hình hiện tại
+													var active_wan = '<% nvram_get_x("", "wan0_ifname_t"); %>';
+													var active_phy = '<% nvram_get_x("", "wan0_phy_ifname_t"); %>';
+													var active_apcli = '<% nvram_get_x("", "apcli_ifname"); %>';
 													var saved_val = '<% nvram_get_x("", "sqm_iface"); %>';
 
-													// 2. Lọc bỏ các giá trị rỗng và loại bỏ trùng lặp
 													var interfaces = [];
-													
-													if (active_wan && active_wan !== "") {
-														interfaces.push(active_wan);
-													}
-													if (active_phy && active_phy !== "" && interfaces.indexOf(active_phy) === -1) {
-														interfaces.push(active_phy);
-													}
-													if (active_apcli && active_apcli !== "" && interfaces.indexOf(active_apcli) === -1) {
-														interfaces.push(active_apcli);
-													}
+													if (active_wan && active_wan !== "") interfaces.push(active_wan);
+													if (active_phy && active_phy !== "" && interfaces.indexOf(active_phy) === -1) interfaces.push(active_phy);
+													if (active_apcli && active_apcli !== "" && interfaces.indexOf(active_apcli) === -1) interfaces.push(active_apcli);
+													if (interfaces.length === 0) interfaces = ["eth3", "ppp0", "apclii0", "apcli0"];
+													if (saved_val && saved_val !== "" && interfaces.indexOf(saved_val) === -1) interfaces.push(saved_val);
 
-													// 3. Dự phòng: Nếu router đang offline (mảng rỗng), nạp danh sách mặc định để người dùng vẫn chọn được
-													if (interfaces.length === 0) {
-														interfaces = ["eth3", "ppp0", "apclii0", "apcli0"];
-													}
-
-													// 4. Đảm bảo giá trị đang lưu (nếu có) luôn xuất hiện trong danh sách
-													if (saved_val && saved_val !== "" && interfaces.indexOf(saved_val) === -1) {
-														interfaces.push(saved_val);
-													}
-
-													// 5. Vẽ các tùy chọn vào Dropbox
 													var select_element = document.getElementById('sqm_iface_select');
-													select_element.options.length = 0; // Xóa sạch các option cũ trước khi tải
-
+													select_element.options.length = 0;
 													for (var i = 0; i < interfaces.length; i++) {
 														var iface = interfaces[i];
 														var option_text = iface;
-														
-														// Thêm chú thích thân thiện cho từng cổng mạng đang hoạt động
-														if (iface === "eth3") {
-															option_text += " (WAN có dây)";
-														} else if (iface === "ppp0") {
-															option_text += " (PPPoE nhà mạng)";
-														} else if (iface === "apclii0") {
-															option_text += " (Kích sóng 2.4G)";
-														} else if (iface === "apcli0") {
-															option_text += " (Kích sóng 5G)";
-														} else if (iface === active_wan) {
-															option_text += " (WAN đang UP)";
-														}
-
+														if (iface === "eth3") option_text += " (WAN có dây)";
+														else if (iface === "ppp0") option_text += " (PPPoE nhà mạng)";
+														else if (iface === "apclii0") option_text += " (Kích sóng 5G)";
+														else if (iface === "apcli0") option_text += " (Kích sóng 2.4G)";
+														else if (iface === active_wan) option_text += " (WAN đang UP)";
 														var opt = document.createElement('option');
 														opt.value = iface;
 														opt.text = option_text;
-														
-														// Tự động chọn đúng cổng đang lưu trong cấu hình
-														if (iface === saved_val) {
-															opt.selected = true;
-														}
+														if (iface === saved_val) opt.selected = true;
 														select_element.add(opt);
 													}
 												}
-
-												// Tự động chạy khi trang web dựng xong
 												jQuery(document).ready(function() {
 													build_dynamic_sqm_interfaces();
 												});
@@ -239,9 +208,54 @@ function applyRule(){
 											<input type="text" maxlength="5" class="input" size="15" name="sqm_overhead"
 												value="<% nvram_get_x("", "sqm_overhead"); %>"
 												placeholder="0" />
-											<span style="color:#888;font-size:11px;">(PPPoE: 8, VDSL: 8-40)</span>
+											<span style="color:#888;font-size:11px;">(PPPoE: 8, VDSL: 8-40, WiFi: 30)</span>
 										</td>
 									</tr>
+
+									<!-- ============================================================ -->
+									<!-- GAME PRIORITY: ECN + DSCP + Filter gộp 1 toggle            -->
+									<!-- ============================================================ -->
+									<tr>
+										<th>Game Priority
+											<br/><span style="color:#888;font-size:11px;font-weight:normal;">ECN + DSCP + UDP filter</span>
+										</th>
+										<td>
+											<div class="main_itoggle">
+												<div id="sqm_game_on_of">
+													<input type="checkbox" id="sqm_game_fake"
+														<% nvram_match_x("", "sqm_game", "1", "value=1 checked"); %>
+														<% nvram_match_x("", "sqm_game", "0", "value=0"); %> />
+												</div>
+											</div>
+											<div style="position: absolute; margin-left: -10000px;">
+												<input type="radio" value="1" name="sqm_game" id="sqm_game_1" class="input"
+													<% nvram_match_x("", "sqm_game", "1", "checked"); %>
+													onclick="change_game_priority();" />Yes
+												<input type="radio" value="0" name="sqm_game" id="sqm_game_0" class="input"
+													<% nvram_match_x("", "sqm_game", "0", "checked"); %>
+													onclick="change_game_priority();" />No
+											</div>
+											<span style="color:#888;font-size:11px;">
+												Ưu tiên game/VoIP — giảm spike lag khi mạng tải nặng.<br/>
+												ECN: báo tắc nghẽn sớm, không drop packet.<br/>
+												DSCP: đánh nhãn ưu tiên game UDP trước bulk download.
+											</span>
+										</td>
+									</tr>
+									<tr id="game_ports_row">
+										<th>Game UDP Ports
+											<br/><span style="color:#888;font-size:11px;font-weight:normal;">Cách nhau bằng dấu phẩy</span>
+										</th>
+										<td>
+											<input type="text" maxlength="100" class="input" size="30" name="sqm_game_ports"
+												value="<% nvram_get_x("", "sqm_game_ports"); %>"
+												placeholder="5000-5060,8001-8002" />
+											<br/><span style="color:#888;font-size:11px;">
+												Liên Quân: 5000-5060,8001-8002 | PUBG: 10012 | LOL: 5000-5500
+											</span>
+										</td>
+									</tr>
+
 								</table>
 								</div>
 
