@@ -88,11 +88,9 @@ start_adg() {
     fi
     load_binary
     getconfig
-    change_dns
-    set_iptable
     # Set CA certificates để AGH verify HTTPS khi download blocklists
     export SSL_CERT_FILE=/etc_ro/ca-certificates.crt
-    
+
     logger -t "AdGuardHome" "Starting AdGuardHome..."
     if [ -f "$AGH_CFG" ] && [ -s "$AGH_CFG" ]; then
         "$AGH_BIN" -c "$AGH_CFG" -w "$AGH_TMP" --no-check-update &
@@ -101,6 +99,31 @@ start_adg() {
         "$AGH_BIN" -w "$AGH_TMP" --no-check-update &
         logger -t "AdGuardHome" "AdGuardHome started in setup mode port 3000 (PID: $!)"
     fi
+
+    # Chờ AGH bind port 53 xong TRƯỚC khi đổi dnsmasq
+    # Tránh race condition: khoảng trống DNS khi restart dnsmasq
+    local mode="$(nvram get adg_redirect)"
+    if [ "$mode" = "2" ]; then
+        logger -t "AdGuardHome" "Waiting for AGH to bind port 53..."
+        local retry=0
+        while [ $retry -lt 10 ]; do
+            if netstat -tlnp 2>/dev/null | grep -q ":53 " && \
+               netstat -ulnp 2>/dev/null | grep -q ":53 "; then
+                logger -t "AdGuardHome" "AGH bound port 53 OK, now disabling dnsmasq DNS"
+                change_dns
+                break
+            fi
+            sleep 1
+            retry=$((retry + 1))
+        done
+        if [ $retry -eq 10 ]; then
+            logger -t "AdGuardHome" "WARNING: AGH did not bind port 53 after 10s"
+            change_dns
+        fi
+    else
+        change_dns
+    fi
+    set_iptable
 }
 
 stop_adg() {
