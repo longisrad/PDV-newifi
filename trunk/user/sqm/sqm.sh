@@ -25,6 +25,29 @@ log() { logger -t "SQM" "$1"; }
 #   - DSCP class rules (EF=high, AF41=medium-high, AF31=medium, CS1=low)
 #   - iptables port marks
 
+# Helper: mark 1 port range cả POSTROUTING lẫn PREROUTING
+_mark() {
+    local IFACE="$1" PROTO="$2" DIR="$3" PORT="$4" DSCP="$5"
+    if [ "$DIR" = "dport" ]; then
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p "$PROTO" --dport "$PORT" -j DSCP --set-dscp-class "$DSCP" 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p "$PROTO" --sport "$PORT" -j DSCP --set-dscp-class "$DSCP" 2>/dev/null
+    else
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p "$PROTO" --sport "$PORT" -j DSCP --set-dscp-class "$DSCP" 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p "$PROTO" --dport "$PORT" -j DSCP --set-dscp-class "$DSCP" 2>/dev/null
+    fi
+}
+
+# Helper: hạ bulk TCP khi connection vượt threshold bytes → CS1
+_bulk_throttle() {
+    local IFACE="$1" BYTES="$2"
+    iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
+        --connbytes "$BYTES": --connbytes-dir both --connbytes-mode bytes \
+        -j DSCP --set-dscp-class CS1 2>/dev/null
+    iptables -t mangle -A PREROUTING -i "$IFACE" -p tcp -m connbytes \
+        --connbytes "$BYTES": --connbytes-dir both --connbytes-mode bytes \
+        -j DSCP --set-dscp-class CS1 2>/dev/null
+}
+
 apply_preset_filters() {
     local IFACE="$1"
     local PRESET="$2"
@@ -33,93 +56,100 @@ apply_preset_filters() {
     case "$PRESET" in
 
     gaming)
-        # Ưu tiên: Game UDP > default > Bulk download
-        # EF  (0xb8): game UDP
-        # CS1 (0x20): bulk (torrent, HTTP download lớn)
         log "Preset: Gaming"
-
-        # Mark game UDP → EF
-        for ports in "5000:5060" "8001:8002" "10012:10012" "27015:27030" "3074:3074"; do
-            START="${ports%:*}"; END="${ports#*:}"
-            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-        done
-
-        # Mark bulk (HTTP large, BitTorrent) → CS1
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
-            --connbytes 1000000: --connbytes-dir both --connbytes-mode bytes \
-            -j DSCP --set-dscp-class CS1 2>/dev/null
+        # ── EF (cao nhất): game UDP realtime ──────────────────────────
+        # Liên Quân Mobile
+        _mark "$IFACE" udp dport 5000:5060  EF
+        _mark "$IFACE" udp dport 8001:8002  EF
+        # PUBG Mobile / PUBG PC
+        _mark "$IFACE" udp dport 10012:10012 EF
+        _mark "$IFACE" udp dport 10006:10006 EF
+        # Steam / DOTA2 / CS2
+        _mark "$IFACE" udp dport 27015:27030 EF
+        _mark "$IFACE" udp dport 27000:27015 EF
+        # Xbox Live / Call of Duty
+        _mark "$IFACE" udp dport 3074:3074   EF
+        _mark "$IFACE" udp dport 3075:3076   EF
+        # Garena (Free Fire, LOL VN)
+        _mark "$IFACE" udp dport 5222:5223   EF
+        _mark "$IFACE" udp dport 7000:7001   EF
+        # Valorant
+        _mark "$IFACE" udp dport 7086:7086   EF
+        _mark "$IFACE" udp dport 7500:8099   EF
+        # Minecraft
+        _mark "$IFACE" udp dport 19132:19133 EF
+        # DNS (quan trọng cho game matchmaking)
+        _mark "$IFACE" udp dport 53:53       EF
+        _mark "$IFACE" tcp dport 53:53       EF
+        # ── CS1 (thấp): bulk download lớn ─────────────────────────────
+        _bulk_throttle "$IFACE" 2000000
         ;;
 
     streaming)
-        # Ưu tiên: Streaming video > default > Bulk
-        # AF41 (0x88): video streaming
-        # CS1  (0x20): bulk
         log "Preset: Streaming"
-
-        # HTTPS streaming (Netflix, YouTube, Disney+)
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
-        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
-
-        # UDP media (QUIC/HTTP3, Twitch)
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
-        iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
-
-        # RTMP streaming
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 1935 -j DSCP --set-dscp-class AF41 2>/dev/null
-        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 1935 -j DSCP --set-dscp-class AF41 2>/dev/null
-
-        # Bulk → thấp hơn
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
-            --connbytes 5000000: --connbytes-dir both --connbytes-mode bytes \
-            -j DSCP --set-dscp-class CS1 2>/dev/null
+        # ── AF41 (medium-high): video stream ──────────────────────────
+        # HTTPS/QUIC (YouTube, Netflix, TikTok, Twitch, Disney+)
+        _mark "$IFACE" tcp dport 443  AF41
+        _mark "$IFACE" udp dport 443  AF41
+        # HTTP fallback
+        _mark "$IFACE" tcp dport 80   AF41
+        # RTMP (OBS stream lên YouTube/Twitch)
+        _mark "$IFACE" tcp dport 1935 AF41
+        _mark "$IFACE" tcp dport 1936 AF41
+        # RTSP (camera, IPTV)
+        _mark "$IFACE" tcp dport 554  AF41
+        _mark "$IFACE" udp dport 554  AF41
+        # RTP/RTCP media (IPTV, VoIP media)
+        _mark "$IFACE" udp dport 5004:5005 AF41
+        # DNS ưu tiên (tránh buffer khi start stream)
+        _mark "$IFACE" udp dport 53   AF41
+        # ── CS1 (thấp): bulk sau khi đã đủ buffer ─────────────────────
+        _bulk_throttle "$IFACE" 5000000
         ;;
 
     wfh)
-        # Ưu tiên: VoIP/Video call > Web > Bulk
-        # EF   (0xb8): Zoom/Meet/Teams audio+video
-        # AF31 (0x68): HTTP/HTTPS web browsing
-        # CS1  (0x20): bulk
         log "Preset: Work From Home"
-
-        # Zoom UDP (audio/video)
-        for ports in "3478:3479" "8801:8802" "8803:8803"; do
-            START="${ports%:*}"; END="${ports#*:}"
-            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-        done
-
-        # Google Meet / MS Teams UDP
-        for ports in "19302:19309" "3478:3481" "50000:50059"; do
-            START="${ports%:*}"; END="${ports#*:}"
-            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-        done
-
-        # Web browsing HTTPS → AF31
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 443 -j DSCP --set-dscp-class AF31 2>/dev/null
-        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 443 -j DSCP --set-dscp-class AF31 2>/dev/null
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 80  -j DSCP --set-dscp-class AF31 2>/dev/null
-        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 80  -j DSCP --set-dscp-class AF31 2>/dev/null
-
-        # Bulk → CS1
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
-            --connbytes 2000000: --connbytes-dir both --connbytes-mode bytes \
-            -j DSCP --set-dscp-class CS1 2>/dev/null
+        # ── EF (cao nhất): VoIP/Video call realtime ───────────────────
+        # Zoom UDP
+        _mark "$IFACE" udp dport 3478:3479  EF
+        _mark "$IFACE" udp dport 8801:8802  EF
+        _mark "$IFACE" udp dport 8803:8803  EF
+        # Google Meet / WebRTC
+        _mark "$IFACE" udp dport 19302:19309 EF
+        _mark "$IFACE" udp dport 3478:3481   EF
+        # MS Teams UDP
+        _mark "$IFACE" udp dport 50000:50059 EF
+        _mark "$IFACE" udp dport 3478:3481   EF
+        # Discord voice/video
+        _mark "$IFACE" udp dport 50000:50050 EF
+        # Zalo call
+        _mark "$IFACE" udp dport 3478:3480   EF
+        # DNS
+        _mark "$IFACE" udp dport 53  EF
+        _mark "$IFACE" tcp dport 53  EF
+        # ── AF31 (medium): web/app làm việc ───────────────────────────
+        _mark "$IFACE" tcp dport 443  AF31
+        _mark "$IFACE" tcp dport 80   AF31
+        # SSH/SFTP remote work
+        _mark "$IFACE" tcp dport 22   AF31
+        # ── CS1 (thấp): bulk download/upload ──────────────────────────
+        _bulk_throttle "$IFACE" 2000000
         ;;
 
     balanced)
-        # Chỉ ECN + bulk throttle, không ưu tiên app cụ thể
         log "Preset: Balanced"
-        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
-            --connbytes 10000000: --connbytes-dir both --connbytes-mode bytes \
-            -j DSCP --set-dscp-class CS1 2>/dev/null
+        # DNS luôn ưu tiên cao
+        _mark "$IFACE" udp dport 53  EF
+        _mark "$IFACE" tcp dport 53  EF
+        # Hạ bulk khi connection rất lớn (>10MB)
+        _bulk_throttle "$IFACE" 10000000
         ;;
 
     custom)
-        # Dùng sqm_game_ports do user nhập
         log "Preset: Custom (ports: $CUSTOM_PORTS)"
         [ -z "$CUSTOM_PORTS" ] && CUSTOM_PORTS="5000-5060,8001-8002"
+        # DNS luôn ưu tiên
+        _mark "$IFACE" udp dport 53  EF
 
         echo "$CUSTOM_PORTS" | tr ',' '\n' | while read port_range; do
             port_range="$(echo "$port_range" | tr -d ' ')"
@@ -130,9 +160,9 @@ apply_preset_filters() {
             else
                 START="$port_range"; END="$port_range"
             fi
-            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+            _mark "$IFACE" udp dport "$START:$END" EF
         done
+        _bulk_throttle "$IFACE" 2000000
         ;;
 
     none|*)
