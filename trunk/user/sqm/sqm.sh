@@ -8,78 +8,193 @@
 #   sqm_up       : upload kbps
 #   sqm_qdisc    : fq_codel or cake
 #   sqm_overhead : overhead bytes (0 = none, WiFi = 30)
-#   sqm_game     : 0/1 Game Priority (ECN + DSCP + UDP port filter)
-#   sqm_game_ports: UDP port ranges, comma-separated (e.g. 5000-5060,8001-8002)
+#   sqm_preset   : none|gaming|streaming|wfh|balanced|custom
+#   sqm_game_ports: UDP port ranges cho preset custom (comma-separated)
 #
 
 SQM_LOCK="/var/run/sqm.lock"
 
-get_nvram() {
-    nvram get "$1"
+get_nvram() { nvram get "$1"; }
+log() { logger -t "SQM" "$1"; }
+
+# ================================================================
+# PRESET DEFINITIONS
+# ================================================================
+# Mỗi preset định nghĩa:
+#   - ECN on/off
+#   - DSCP class rules (EF=high, AF41=medium-high, AF31=medium, CS1=low)
+#   - iptables port marks
+
+apply_preset_filters() {
+    local IFACE="$1"
+    local PRESET="$2"
+    local CUSTOM_PORTS="$3"
+
+    case "$PRESET" in
+
+    gaming)
+        # Ưu tiên: Game UDP > default > Bulk download
+        # EF  (0xb8): game UDP
+        # CS1 (0x20): bulk (torrent, HTTP download lớn)
+        log "Preset: Gaming"
+
+        # Mark game UDP → EF
+        for ports in "5000:5060" "8001:8002" "10012:10012" "27015:27030" "3074:3074"; do
+            START="${ports%:*}"; END="${ports#*:}"
+            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+        done
+
+        # Mark bulk (HTTP large, BitTorrent) → CS1
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
+            --connbytes 1000000: --connbytes-dir both --connbytes-mode bytes \
+            -j DSCP --set-dscp-class CS1 2>/dev/null
+        ;;
+
+    streaming)
+        # Ưu tiên: Streaming video > default > Bulk
+        # AF41 (0x88): video streaming
+        # CS1  (0x20): bulk
+        log "Preset: Streaming"
+
+        # HTTPS streaming (Netflix, YouTube, Disney+)
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
+
+        # UDP media (QUIC/HTTP3, Twitch)
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport 443 -j DSCP --set-dscp-class AF41 2>/dev/null
+
+        # RTMP streaming
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 1935 -j DSCP --set-dscp-class AF41 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 1935 -j DSCP --set-dscp-class AF41 2>/dev/null
+
+        # Bulk → thấp hơn
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
+            --connbytes 5000000: --connbytes-dir both --connbytes-mode bytes \
+            -j DSCP --set-dscp-class CS1 2>/dev/null
+        ;;
+
+    wfh)
+        # Ưu tiên: VoIP/Video call > Web > Bulk
+        # EF   (0xb8): Zoom/Meet/Teams audio+video
+        # AF31 (0x68): HTTP/HTTPS web browsing
+        # CS1  (0x20): bulk
+        log "Preset: Work From Home"
+
+        # Zoom UDP (audio/video)
+        for ports in "3478:3479" "8801:8802" "8803:8803"; do
+            START="${ports%:*}"; END="${ports#*:}"
+            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+        done
+
+        # Google Meet / MS Teams UDP
+        for ports in "19302:19309" "3478:3481" "50000:50059"; do
+            START="${ports%:*}"; END="${ports#*:}"
+            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+        done
+
+        # Web browsing HTTPS → AF31
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 443 -j DSCP --set-dscp-class AF31 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 443 -j DSCP --set-dscp-class AF31 2>/dev/null
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp --dport 80  -j DSCP --set-dscp-class AF31 2>/dev/null
+        iptables -t mangle -A PREROUTING  -i "$IFACE" -p tcp --sport 80  -j DSCP --set-dscp-class AF31 2>/dev/null
+
+        # Bulk → CS1
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
+            --connbytes 2000000: --connbytes-dir both --connbytes-mode bytes \
+            -j DSCP --set-dscp-class CS1 2>/dev/null
+        ;;
+
+    balanced)
+        # Chỉ ECN + bulk throttle, không ưu tiên app cụ thể
+        log "Preset: Balanced"
+        iptables -t mangle -A POSTROUTING -o "$IFACE" -p tcp -m connbytes \
+            --connbytes 10000000: --connbytes-dir both --connbytes-mode bytes \
+            -j DSCP --set-dscp-class CS1 2>/dev/null
+        ;;
+
+    custom)
+        # Dùng sqm_game_ports do user nhập
+        log "Preset: Custom (ports: $CUSTOM_PORTS)"
+        [ -z "$CUSTOM_PORTS" ] && CUSTOM_PORTS="5000-5060,8001-8002"
+
+        echo "$CUSTOM_PORTS" | tr ',' '\n' | while read port_range; do
+            port_range="$(echo "$port_range" | tr -d ' ')"
+            [ -z "$port_range" ] && continue
+            if echo "$port_range" | grep -q '-'; then
+                START="$(echo "$port_range" | cut -d'-' -f1)"
+                END="$(echo "$port_range" | cut -d'-' -f2)"
+            else
+                START="$port_range"; END="$port_range"
+            fi
+            iptables -t mangle -A POSTROUTING -o "$IFACE" -p udp --dport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+            iptables -t mangle -A PREROUTING  -i "$IFACE" -p udp --sport "$START:$END" -j DSCP --set-dscp-class EF 2>/dev/null
+        done
+        ;;
+
+    none|*)
+        log "Preset: None (no priority filter)"
+        ;;
+    esac
 }
 
-log() {
-    logger -t "SQM" "$1"
+# ================================================================
+# DSCP class setup (dùng chung cho mọi preset trừ none)
+# ================================================================
+setup_dscp_classes() {
+    local IFACE="$1"
+    local UP_KBIT="$2"
+    local PRESET="$3"
+
+    [ "$PRESET" = "none" ] && return
+
+    # Class 1:20 → EF/AF41 high priority
+    tc class add dev "$IFACE" parent 1:1 classid 1:20 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 1
+    tc qdisc add dev "$IFACE" parent 1:20 fq_codel ecn
+
+    # Class 1:30 → CS1 bulk low priority  
+    tc class add dev "$IFACE" parent 1:1 classid 1:30 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 3
+    tc qdisc add dev "$IFACE" parent 1:30 fq_codel ecn
+
+    # Streaming có thêm class AF41 medium-high
+    if [ "$PRESET" = "streaming" ] || [ "$PRESET" = "wfh" ]; then
+        tc class add dev "$IFACE" parent 1:1 classid 1:25 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 2
+        tc qdisc add dev "$IFACE" parent 1:25 fq_codel ecn
+        # AF41 (0x88) → 1:25
+        tc filter add dev "$IFACE" parent 1: protocol ip prio 3 u32 \
+            match ip dsfield 0x88 0xfc flowid 1:25
+        # AF31 (0x68) → 1:25
+        tc filter add dev "$IFACE" parent 1: protocol ip prio 4 u32 \
+            match ip dsfield 0x68 0xfc flowid 1:25
+    fi
+
+    # EF (0xb8) → 1:20
+    tc filter add dev "$IFACE" parent 1: protocol ip prio 1 u32 \
+        match ip dsfield 0xb8 0xfc flowid 1:20
+
+    # CS1 (0x20) → 1:30
+    tc filter add dev "$IFACE" parent 1: protocol ip prio 2 u32 \
+        match ip dsfield 0x20 0xfc flowid 1:30
 }
 
 stop_sqm() {
     log "Stopping SQM..."
-
     IFACE="$(get_nvram sqm_iface)"
     [ -z "$IFACE" ] && IFACE="eth3"
 
-    # Remove egress qdisc
     tc qdisc del dev "$IFACE" root 2>/dev/null
-
-    # Remove ingress + IFB
     tc qdisc del dev "$IFACE" ingress 2>/dev/null
     tc qdisc del dev ifb0 root 2>/dev/null
     ip link set ifb0 down 2>/dev/null
 
-    # Remove iptables DSCP marks nếu có
     iptables -t mangle -F POSTROUTING 2>/dev/null
+    iptables -t mangle -F PREROUTING  2>/dev/null
 
     rm -f "$SQM_LOCK"
     log "SQM stopped"
-}
-
-add_game_filters() {
-    local IFACE="$1"
-    local GAME_PORTS="$2"
-    local PRIO=10
-
-    [ -z "$GAME_PORTS" ] && GAME_PORTS="5000-5060,8001-8002"
-
-    log "Adding game UDP filters: $GAME_PORTS"
-
-    # Parse từng port range
-    echo "$GAME_PORTS" | tr ',' '\n' | while read port_range; do
-        port_range="$(echo "$port_range" | tr -d ' ')"
-        [ -z "$port_range" ] && continue
-
-        if echo "$port_range" | grep -q '-'; then
-            # Range: e.g. 5000-5060
-            START="$(echo "$port_range" | cut -d'-' -f1)"
-            END="$(echo "$port_range" | cut -d'-' -f2)"
-            # Tính mask cho range (dùng iptables cho đơn giản và chính xác hơn)
-            iptables -t mangle -A POSTROUTING -o "$IFACE" \
-                -p udp --dport "$START:$END" \
-                -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING -i "$IFACE" \
-                -p udp --sport "$START:$END" \
-                -j DSCP --set-dscp-class EF 2>/dev/null
-        else
-            # Single port
-            iptables -t mangle -A POSTROUTING -o "$IFACE" \
-                -p udp --dport "$port_range" \
-                -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -A PREROUTING -i "$IFACE" \
-                -p udp --sport "$port_range" \
-                -j DSCP --set-dscp-class EF 2>/dev/null
-        fi
-
-        PRIO=$((PRIO + 1))
-    done
 }
 
 start_sqm() {
@@ -93,35 +208,34 @@ start_sqm() {
     UP="$(get_nvram sqm_up)"
     QDISC="$(get_nvram sqm_qdisc)"
     OVERHEAD="$(get_nvram sqm_overhead)"
-    GAME="$(get_nvram sqm_game)"
-    GAME_PORTS="$(get_nvram sqm_game_ports)"
+    PRESET="$(get_nvram sqm_preset)"
+    CUSTOM_PORTS="$(get_nvram sqm_game_ports)"
 
-    # Validate
     [ -z "$IFACE" ]    && { log "ERROR: sqm_iface not set"; return 1; }
     [ -z "$DOWN" ]     && { log "ERROR: sqm_down not set"; return 1; }
     [ -z "$UP" ]       && { log "ERROR: sqm_up not set"; return 1; }
     [ -z "$QDISC" ]    && QDISC="fq_codel"
     [ -z "$OVERHEAD" ] && OVERHEAD="0"
+    [ -z "$PRESET" ]   && PRESET="none"
 
-    # Game mode bật ECN tự động
+    # ECN bật tự động cho mọi preset trừ none
     ECN_OPT=""
-    [ "$GAME" = "1" ] && ECN_OPT="ecn"
+    [ "$PRESET" != "none" ] && ECN_OPT="ecn"
 
     DOWN_KBIT="${DOWN}kbit"
     UP_KBIT="${UP}kbit"
 
-    log "Starting SQM on $IFACE: down=${DOWN_KBIT} up=${UP_KBIT} qdisc=${QDISC} overhead=${OVERHEAD} game=${GAME}"
+    log "Starting SQM: iface=$IFACE down=$DOWN_KBIT up=$UP_KBIT preset=$PRESET"
 
-    # Load required modules
     modprobe sch_htb      2>/dev/null
     modprobe sch_fq_codel 2>/dev/null
     modprobe ifb          2>/dev/null
     modprobe act_mirred   2>/dev/null
     modprobe xt_DSCP      2>/dev/null
-    modprobe xt_dscp      2>/dev/null
+    modprobe xt_connbytes 2>/dev/null
 
     # -------------------------
-    # EGRESS (upload shaping)
+    # EGRESS (upload)
     # -------------------------
     tc qdisc del dev "$IFACE" root 2>/dev/null
     tc qdisc add dev "$IFACE" root handle 1: htb default 10
@@ -135,28 +249,14 @@ start_sqm() {
         tc qdisc add dev "$IFACE" parent 1:10 fq_codel $ECN_OPT
     fi
 
-    # Game Priority classes (DSCP EF → 1:20, CS1 bulk → 1:30)
-    if [ "$GAME" = "1" ]; then
-        # High priority: game/VoIP (EF)
-        tc class add dev "$IFACE" parent 1:1 classid 1:20 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 1
-        tc qdisc add dev "$IFACE" parent 1:20 fq_codel ecn
-        tc filter add dev "$IFACE" parent 1: protocol ip prio 1 u32 \
-            match ip dsfield 0xb8 0xfc flowid 1:20
+    # Setup DSCP classes + filters
+    setup_dscp_classes "$IFACE" "$UP_KBIT" "$PRESET"
 
-        # Low priority: bulk (CS1)
-        tc class add dev "$IFACE" parent 1:1 classid 1:30 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 3
-        tc qdisc add dev "$IFACE" parent 1:30 fq_codel ecn
-        tc filter add dev "$IFACE" parent 1: protocol ip prio 2 u32 \
-            match ip dsfield 0x20 0xfc flowid 1:30
-
-        # Thêm iptables DSCP mark cho UDP game ports
-        add_game_filters "$IFACE" "$GAME_PORTS"
-
-        log "Game Priority enabled: ECN + DSCP + UDP filter (ports: ${GAME_PORTS:-5000-5060,8001-8002})"
-    fi
+    # Apply preset iptables marks
+    apply_preset_filters "$IFACE" "$PRESET" "$CUSTOM_PORTS"
 
     # -------------------------
-    # INGRESS (download shaping via IFB)
+    # INGRESS (download via IFB)
     # -------------------------
     ip link set ifb0 up 2>/dev/null
     tc qdisc del dev "$IFACE" ingress 2>/dev/null
@@ -177,38 +277,28 @@ start_sqm() {
     fi
 
     touch "$SQM_LOCK"
-    log "SQM started successfully"
+    log "SQM started (preset: $PRESET)"
 }
 
 status_sqm() {
     IFACE="$(get_nvram sqm_iface)"
-    echo "=== Egress (upload) ==="
-    tc qdisc show dev "$IFACE" 2>/dev/null
+    PRESET="$(get_nvram sqm_preset)"
+    echo "=== SQM Status (preset: $PRESET) ==="
+    echo ""
+    echo "--- Egress (upload) ---"
     tc class show dev "$IFACE" 2>/dev/null
     echo ""
-    echo "=== Ingress via IFB (download) ==="
+    echo "--- Ingress/IFB (download) ---"
     tc qdisc show dev ifb0 2>/dev/null
     echo ""
-    echo "=== Game DSCP filters ==="
-    iptables -t mangle -L POSTROUTING -n 2>/dev/null | grep DSCP
+    echo "--- DSCP Filters ---"
+    iptables -t mangle -L POSTROUTING -n 2>/dev/null | grep -E "DSCP|dscp"
 }
 
 case "$1" in
-    start)
-        [ "$(get_nvram sqm_enable)" = "1" ] && start_sqm
-        ;;
-    stop)
-        stop_sqm
-        ;;
-    restart)
-        stop_sqm
-        sleep 1
-        [ "$(get_nvram sqm_enable)" = "1" ] && start_sqm
-        ;;
-    status)
-        status_sqm
-        ;;
-    *)
-        echo "Usage: $0 {start|stop|restart|status}"
-        ;;
+    start)   [ "$(get_nvram sqm_enable)" = "1" ] && start_sqm ;;
+    stop)    stop_sqm ;;
+    restart) stop_sqm; sleep 1; [ "$(get_nvram sqm_enable)" = "1" ] && start_sqm ;;
+    status)  status_sqm ;;
+    *)       echo "Usage: $0 {start|stop|restart|status}" ;;
 esac
