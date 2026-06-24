@@ -74,11 +74,29 @@ load_binary() {
 
 getconfig() {
     mkdir -p /etc/storage/AdGuardHome
-    # Let AGH auto-generate config on first run
-    # Only pre-set language to English if no config exists
+
     if [ ! -f "$AGH_CFG" ] || [ ! -s "$AGH_CFG" ]; then
         logger -t "AdGuardHome" "No config found, AGH will auto-generate on first run"
+        return
     fi
+
+    # Tạo thư mục RAM cho stats
+    mkdir -p /tmp/adguard-log
+
+    # Chuyển statistics (stats.db) sang RAM - ghi liên tục, bảo vệ NAND
+    # filters/ và sessions.db giữ trong NAND (cần persist qua reboot)
+    if grep -q '^statistics:' "$AGH_CFG"; then
+        sed -i '/^statistics:/,/^[a-z]/{s|  dir_path: ""|  dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
+        logger -t "AdGuardHome" "Statistics dir set to RAM (/tmp/adguard-log)"
+    fi
+
+    # Xóa stats.db cũ trong NAND nếu còn tồn tại
+    rm -f /etc/storage/AdGuardHome/data/stats.db
+
+    # Tắt ghi file querylog (dùng memory buffer, vẫn xem được trong WebUI)
+    sed -i 's/  file_enabled: true/  file_enabled: false/' "$AGH_CFG"
+
+    logger -t "AdGuardHome" "Config patched: stats→RAM, querylog→memory"
 }
 
 start_adg() {
