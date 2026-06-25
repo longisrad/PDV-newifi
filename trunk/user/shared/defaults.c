@@ -744,18 +744,6 @@ struct nvram_pair router_defaults[] = {
 	/* AdguargHome */
 	{ "adg_enable", "0" },
 	{ "adg_redirect", "0" },
-#endif
-
-#if defined(APP_TAILSCALE)
-	{ "tailscale_enable", "0" },
-	{ "tailscale_subnets", "" },
-	{ "tailscale_exitnode", "0" },
-	{ "tailscale_accept_routes", "0" },
-	{ "tailscale_accept_dns", "0" },
-	{ "tailscale_args", "" },
-#endif
-
-#if defined(APP_SHADOWSOCKS)
 	{ "sqm_enable", "0" },
 	{ "sqm_iface", "eth3" },
 	{ "sqm_down", "90000" },
@@ -765,6 +753,17 @@ struct nvram_pair router_defaults[] = {
 	{ "sqm_preset", "none" },
 	{ "sqm_game_ports", "5000-5060,8001-8002" },
 	
+	/* Tailscale VPN */
+	{ "ts_enable",        "0" },
+	{ "ts_authkey",       "" },
+	{ "ts_hostname",      "" },
+	{ "ts_exitnode",      "0" },
+	{ "ts_subnet",        "" },
+	{ "ts_accept_routes", "0" },
+	{ "ts_allow_lan",     "1" },
+	{ "ts_shields_up",    "0" },
+
+
 	/*caddy*/
 	{ "caddy_enable", "0" },
 	{ "caddy_file", "0" },
@@ -902,34 +901,226 @@ struct nvram_pair router_defaults[] = {
 	{ "modem_node", "0" },
 	{ "modem_nets", "0" },
 	{ "modem_zcd", "0" },
+	{ "modem_cmd", "" },
+	{ "modem_mtu", "1500" },
 
-	/* SQM QoS Conf group */
-	{ "sqm_enable", "0" },
-	{ "sqm_enabled", "0" },
-	{ "sqm_iface", "eth3" },
-	{ "sqm_down", "0" },
-	{ "sqm_up", "0" },
-	{ "sqm_qdisc", "fq_codel" },
-	{ "sqm_overhead", "0" },
-	{ "sqm_preset", "simple" },
-	{ "sqm_game_ports", "1024-65535" },
-	{ "sqm_settings", "" },
+	{ "force_igmp", "0" },
+	{ "force_mld", "0" },
+	{ "udpxy_enable_x", "0" },
+	{ "udpxy_clients", "10" },
+	{ "udpxy_renew_period", "120" },
+#if defined(APP_XUPNPD)
+	{ "xupnpd_enable_x", "0" },
+	{ "xupnpd_udpxy", "0" },
+#endif
+	{ "rstats_enable", "1" },
+	{ "rstats_stored", "1" },
+	{ "stime_stored", "1" },
 
-	/* Dweb Configuration */
-	{ "w_ai", "1" },
-	{ "w_vpn_s", "1" },
-	{ "w_vpn_c", "1" },
-	{ "w_wnet", "1" },
-	{ "w_sys", "1" },
-	{ "w_usb", "1" },
-	{ "w_net", "1" },
-	{ "w_log", "1" },
-	{ "w_scu", "1" },
-	{ "w_dnsf", "1" },
-	{ "w_ss", "1" },
-	{ "w_men", "1" },
-	{ "w_adbyby", "1" },
-	{ "w_pdnsd", "1" },
+	{ "http_id", "TIDe855a6487043d70a" },
+	{ "controlrate_unknown_unicast", "0" },
+	{ "controlrate_unknown_multicast", "0" },
+	{ "controlrate_multicast", "0" },
+	{ "controlrate_broadcast", "10" },
+
+	{ "di_poll_mode", "0" },
+	{ "di_timeout", "2" },
+	{ "di_time_done", "30" },
+	{ "di_time_fail", "5" },
+	{ "di_lost_delay", "1" },
+	{ "di_lost_action", "0" },
+	{ "di_recon_pause", "0" },
+	{ "di_addr0", "114.114.114.114" },
+	{ "di_addr1", "208.67.222.222" },
+	{ "di_addr2", "14.17.42.40" },
+	{ "di_addr3", "8.8.8.8" },
+	{ "di_addr4", "8.8.4.4" },
+	{ "di_addr5", "208.67.220.220" },
+	{ "di_port0", "53" },
+	{ "di_port1", "53" },
+	{ "di_port2", "80" },
+	{ "di_port3", "53" },
+	{ "di_port4", "53" },
+	{ "di_port5", "53" },
+
+	{ "fw_pt_pppoe", "0" },
+
+#if defined(BOARD_ROLE_REPEATER)
+	{ "sw_mode", "3" },
+#else
+	{ "sw_mode", "1" },
+#endif
+
+	{ "telnetd", "0" },
+	{ "sshd_enable", "1" },
+	{ "wins_enable", "0" },
+	{ "lltd_enable", "1" },
+	{ "adsc_enable", "0" },
+	{ "crond_enable", "1" },
+	{ "crond_log", "0" },
+
+#if defined(BOARD_N65U)
+	{ "inic_disable", "0" },
+#endif
+
+	{ "wol_mac_last", "" },
+	{ "gw_arp_ping", "0" },
+	{ "ez_action_short", "0" },
+#if !defined(BOARD_GPIO_BTN_RESET)
+	{ "ez_action_long", "15" },	/* Reset */
+#else
+	{ "ez_action_long", "0" },
+#endif
+#if defined (BOARD_GPIO_BTN_FN1)
+	{ "fn1_action_short", "0" },
+	{ "fn1_action_long", "0" },
+#endif
+#if defined (BOARD_GPIO_BTN_FN2)
+	{ "fn2_action_short", "0" },
+	{ "fn2_action_long", "0" },
+#endif
+	{ "watchdog_cpu", "1" },
+	{ "front_led_all", "1" },
+	{ "front_led_wan", "2" },
+	{ "front_led_lan", "2" },
+	{ "front_led_wif", "1" },
+	{ "front_led_usb", "1" },
+	{ "front_led_pwr", "1" },
+
+	{ "ether_igmp", "1" },
+	{ "ether_uport", "0" },		/* WAN port in AP mode is static upstream by default */
+	{ "ether_m2u", "2" },
+	{ "ether_green", "1" },
+	{ "ether_eee", "0" },
+#if defined(USE_RTL8367)
+	{ "ether_jumbo", "1" },
+#else
+	{ "ether_jumbo", "0" },
+#endif
+#if (BOARD_NUM_ETH_LEDS > 1)
+	{ "ether_led0", "3" },
+#else
+	{ "ether_led0", "7" },
+#endif
+	{ "ether_led1", "0" },
+
+	{ "ether_link_wan",  "0" },
+	{ "ether_flow_wan",  "0" },
+	{ "ether_link_lan1", "0" },
+	{ "ether_flow_lan1", "0" },
+	{ "ether_link_lan2", "0" },
+	{ "ether_flow_lan2", "0" },
+	{ "ether_link_lan3", "0" },
+	{ "ether_flow_lan3", "0" },
+	{ "ether_link_lan4", "0" },
+	{ "ether_flow_lan4", "0" },
+#if BOARD_NUM_ETH_EPHY > 5
+	{ "ether_link_lan5", "0" },
+	{ "ether_flow_lan5", "0" },
+#if BOARD_NUM_ETH_EPHY > 6
+	{ "ether_link_lan6", "0" },
+	{ "ether_flow_lan6", "0" },
+	{ "ether_link_lan7", "0" },
+	{ "ether_flow_lan7", "0" },
+#endif
+#endif
+
+#if defined(CONFIG_RALINK_MT7621) || (defined(CONFIG_RALINK_MT7620) && !defined(BOARD_N14U))
+#if defined(USE_MT7615_AP) || (USE_MT7915_AP) // hwnat is disabled by default
+	{ "hw_nat_mode", "2" },
+#else
+	{ "hw_nat_mode", "4" },
+#endif
+#else
+	{ "hw_nat_mode", "1" },
+#endif
+	{ "sw_nat_mode", "0" },
+#if defined(USE_SFE)
+	{ "sfe_enable", "0" },
+#endif
+	{ "fw_syn_cook", "0" },
+	{ "fw_mac_drop", "0" },
+	{ "nf_nat_type", "2" },
+	{ "nf_nat_loop", "1" },
+#if (BOARD_RAM_SIZE > 128)
+	{ "nf_max_conn", "32768" },
+#elif (BOARD_RAM_SIZE > 32)
+	{ "nf_max_conn", "16384" },
+#else
+	{ "nf_max_conn", "8192" },
+#endif
+	{ "nf_alg_ftp0", "21" },
+	{ "nf_alg_ftp1", "" },
+	{ "nf_alg_pptp", "0" },
+	{ "nf_alg_h323", "0" },
+	{ "nf_alg_rtsp", "0" },
+	{ "nf_alg_sip", "0" },
+
+	{ "help_enable", "1" },
+
+	{ "vpns_enable", "0" },
+	{ "vpns_type", "0" },
+	{ "vpns_cast", "0" },
+	{ "vpns_auth", "0" },
+	{ "vpns_mppe", "1" },
+	{ "vpns_mtu", "1450" },
+	{ "vpns_mru", "1450" },
+	{ "vpns_vuse", "0" },
+	{ "vpns_vnet", "10.8.0.0" },
+	{ "vpns_actl", "0" },
+	{ "vpns_cli0", "245" },
+	{ "vpns_cli1", "254" },
+	{ "vpns_num_x", "0" },
+
+	{ "vpnc_enable", "0" },
+	{ "vpnc_type", "0" },
+	{ "vpnc_peer", "" },
+	{ "vpnc_user", "" },
+	{ "vpnc_pass", "" },
+	{ "vpnc_auth", "0" },
+	{ "vpnc_mppe", "0" },
+	{ "vpnc_pppd", "" },
+	{ "vpnc_rnet", "" },
+	{ "vpnc_rmsk", "" },
+	{ "vpnc_pdns", "0" },
+	{ "vpnc_mtu", "1450" },
+	{ "vpnc_mru", "1450" },
+	{ "vpnc_sfw", "0" },
+	{ "vpnc_dgw", "0" },
+
+	{ "vpns_ov_mode", "1" },
+	{ "vpns_ov_prot", "0" },
+	{ "vpns_ov_port", "1194" },
+	{ "vpns_ov_mdig", "1" },
+	{ "vpns_ov_ciph", "15" },
+	{ "vpns_ov_ncp_clist", DEF_OVPNS_CIPH_LIST },
+	{ "vpns_ov_compress", "2" },
+	{ "vpns_ov_atls", "0" },
+	{ "vpns_ov_tcv2", "0" },
+	{ "vpns_ov_rdgw", "0" },
+	{ "vpnc_ov_mode", "1" },
+	{ "vpnc_ov_cnat", "0" },
+	{ "vpnc_ov_prot", "0" },
+	{ "vpnc_ov_port", "1194" },
+	{ "vpnc_ov_auth", "0" },
+	{ "vpnc_ov_mdig", "1" },
+	{ "vpnc_ov_ciph", "15" },
+	{ "vpnc_ov_ncp_clist", DEF_OVPNC_CIPH_LIST },
+	{ "vpnc_ov_compress", "2" },
+	{ "vpnc_ov_atls", "0" },
+
+#if defined(APP_XTU)
+	/* xTun */
+	{ "xTun_iface", "tun0" },
+	{ "xTun_cidr", "10.0.1.2/24" },
+	{ "xTun_server", "server.me" },
+	{ "xTun_port", "1082" },
+	{ "xTun_tcp", "0" },
+	{ "xTun_key", "password" },
+
+	{ "xTun_dns", "1.1.1.1" },
+	{ "xTun_black_list", "/etc/storage/xTun_black_list" },
+#endif
 
 	{ 0, 0 }
 };
@@ -1035,10 +1226,7 @@ struct nvram_pair tables_defaults[] = {
 	{ "rt_macdesc_x", "" },
 
 	{ "wl_wdslist_x", "" },
-	{ "wl_wdsdesc_x", "" },
-
 	{ "rt_wdslist_x", "" },
-	{ "rt_wdsdesc_x", "" },
 
 	{ 0, 0 }
 };
