@@ -56,13 +56,22 @@ jobs:
 
       - name: Download Tailscale binary
         run: |
-          TS_URL=$(curl -s https://api.github.com/repos/lmq8267/tailscale/releases/latest \
+          # GuNanOvO/openwrt-tailscale: binary mipsle nhỏ, UPX compressed
+          TS_URL=$(curl -s https://api.github.com/repos/GuNanOvO/openwrt-tailscale/releases/latest \
             | grep "browser_download_url" \
             | grep "mipsle" \
+            | grep -v "normal" \
+            | grep -v "ipk" \
             | grep ".tar.gz" \
             | head -1 \
             | cut -d '"' -f 4)
           echo "Downloading Tailscale from: $TS_URL"
+          if [ -z "$TS_URL" ]; then
+            echo "ERROR: Could not find mipsle binary URL"
+            curl -s https://api.github.com/repos/GuNanOvO/openwrt-tailscale/releases/latest \
+              | grep "browser_download_url"
+            exit 1
+          fi
           curl -L -o /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz "$TS_URL"
           echo "Downloaded: $(du -h /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz | cut -f1)"
 
