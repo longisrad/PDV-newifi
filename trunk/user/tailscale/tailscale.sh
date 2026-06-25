@@ -1,104 +1,332 @@
 #!/bin/sh
-# /usr/bin/tailscale.sh
-# Kịch bản quản lý Tailscale giải nén trực tiếp từ Flash ra RAM
+#
+# Tailscale for Padavan (MT7621/MIPS)
+# Binary lưu NAND: /etc/storage/tailscale/
+# Chạy trên RAM: /tmp/tailscale/
+#
+# NVRAM keys:
+#   ts_enable      : 0/1
+#   ts_authkey     : auth key (one-time, xóa sau login)
+#   ts_hostname    : custom hostname
+#   ts_exitnode    : 0/1 advertise exit node
+#   ts_subnet      : subnet để advertise (e.g. 192.168.123.0/24)
+#   ts_accept_routes: 0/1 accept routes from other nodes
+#   ts_allow_lan   : 0/1 allow LAN access when using exit node
+#   ts_shields_up  : 0/1 block incoming connections
+#
 
-BIN_DIR="/tmp/tailscale"
-BIN_PATH="$BIN_DIR/tailscaled"
-SOCKET_PATH="/var/run/tailscale/tailscaled.sock"
-STATE_PATH="/etc/storage/tailscale/tailscaled.state"
+TS_STORAGE="/etc/storage/tailscale"
+TS_BIN_GZ="$TS_STORAGE/tailscale.tar.gz"
+TS_STATE="$TS_STORAGE/tailscaled.state"
+TS_RUN="/tmp/tailscale"
+TS_BIN="$TS_RUN/tailscale"
+TS_DAEMON="$TS_RUN/tailscaled"
+TS_SOCK="/tmp/tailscaled.sock"
+TS_LOCK="/var/run/tailscale.lock"
+TS_PID="/var/run/tailscaled.pid"
 
-extract_tailscale() {
-    logger -t "Tailscale" "Bắt đầu giải nén từ bộ nhớ Flash (/etc_ro)..."
-    mkdir -p "$BIN_DIR"
-    mkdir -p "/var/run/tailscale"
-    mkdir -p "/etc/storage/tailscale"
-    
-    # Giải nén tệp tar.gz được đóng gói sẵn trong ROM
-    if [ -f "/etc_ro/tailscale.tar.gz" ]; then
-        tar -zxf /etc_ro/tailscale.tar.gz -C "$BIN_DIR/"
-        
-        # Đổi tên tệp sau khi giải nén cho đúng định dạng
-        if [ -f "$BIN_DIR/tailscaled" ]; then
-            chmod +x "$BIN_PATH"
-            # Tạo liên kết để sử dụng được CLI 'tailscale'
-            ln -sf "$BIN_PATH" "$BIN_DIR/tailscale"
-            logger -t "Tailscale" "Giải nén thành công ra RAM!"
-            return 0
-        fi
+# GitHub repo binary
+TS_REPO="lmq8267/tailscale"
+TS_ARCH="mipsle"
+
+log() { logger -t "Tailscale" "$1"; }
+
+get_nvram() { nvram get "$1"; }
+
+# ================================================================
+# Download / Update binary từ GitHub releases
+# ================================================================
+download_binary() {
+    log "Checking latest release from $TS_REPO..."
+    mkdir -p "$TS_STORAGE"
+
+    # Lấy latest release URL
+    local API_URL="https://api.github.com/repos/$TS_REPO/releases/latest"
+    local RELEASE_INFO
+    RELEASE_INFO="$(wget -qO- "$API_URL" 2>/dev/null)"
+
+    if [ -z "$RELEASE_INFO" ]; then
+        log "ERROR: Cannot reach GitHub API"
+        return 1
     fi
-    logger -t "Tailscale" "LỖI: Không tìm thấy file nén trong bộ nhớ Flash!"
-    return 1
+
+    # Parse download URL cho MIPS
+    local DL_URL
+    DL_URL="$(echo "$RELEASE_INFO" | grep "browser_download_url" | \
+              grep "$TS_ARCH" | grep ".tar.gz" | \
+              head -1 | sed 's/.*"browser_download_url": "\(.*\)".*/\1/')"
+
+    if [ -z "$DL_URL" ]; then
+        log "ERROR: No binary found for arch=$TS_ARCH"
+        return 1
+    fi
+
+    local VERSION
+    VERSION="$(echo "$RELEASE_INFO" | grep '"tag_name"' | head -1 | \
+               sed 's/.*"tag_name": "\(.*\)".*/\1/')"
+
+    log "Downloading Tailscale $VERSION for $TS_ARCH..."
+    wget -q --no-check-certificate -O "$TS_BIN_GZ" "$DL_URL"
+
+    if [ $? -ne 0 ] || [ ! -s "$TS_BIN_GZ" ]; then
+        log "ERROR: Download failed"
+        rm -f "$TS_BIN_GZ"
+        return 1
+    fi
+
+    log "Download OK: $VERSION"
+    echo "$VERSION" > "$TS_STORAGE/version"
+    return 0
 }
 
-start_tailscale() {
-    logger -t "Tailscale" "Đang khởi động dịch vụ..."
-    
-    # Nếu file chạy chưa có trên RAM, tiến hành giải nén từ Flash
-    if [ ! -f "$BIN_PATH" ]; then
-        extract_tailscale
-        if [ $? -ne 0 ]; then
-            return 1
+# ================================================================
+# Extract binary vào RAM
+# ================================================================
+extract_binary() {
+    mkdir -p "$TS_RUN"
+
+    if [ ! -f "$TS_BIN_GZ" ]; then
+        log "ERROR: No binary found at $TS_BIN_GZ"
+        return 1
+    fi
+
+    tar -xzf "$TS_BIN_GZ" -C "$TS_RUN" 2>/dev/null
+    # Tìm và flatten binary nếu nằm trong subdir
+    find "$TS_RUN" -name "tailscale" -not -path "$TS_BIN" \
+        -exec mv {} "$TS_BIN" \; 2>/dev/null
+    find "$TS_RUN" -name "tailscaled" -not -path "$TS_DAEMON" \
+        -exec mv {} "$TS_DAEMON" \; 2>/dev/null
+
+    chmod +x "$TS_BIN" "$TS_DAEMON" 2>/dev/null
+
+    if [ ! -x "$TS_BIN" ] || [ ! -x "$TS_DAEMON" ]; then
+        log "ERROR: Binary extraction failed"
+        return 1
+    fi
+
+    log "Binary extracted to RAM: $TS_RUN"
+    return 0
+}
+
+# ================================================================
+# Setup kernel modules và IP forwarding
+# ================================================================
+setup_system() {
+    # TUN device
+    mkdir -p /dev/net
+    [ ! -c /dev/net/tun ] && mknod /dev/net/tun c 10 200
+    chmod 666 /dev/net/tun
+
+    # Load TUN module
+    modprobe tun 2>/dev/null
+
+    # IP forwarding
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null
+
+    log "System setup OK (TUN, ip_forward)"
+}
+
+# ================================================================
+# Start tailscaled daemon
+# ================================================================
+start_daemon() {
+    if pgrep tailscaled >/dev/null 2>&1; then
+        log "tailscaled already running"
+        return 0
+    fi
+
+    mkdir -p "$TS_RUN"
+
+    # State dir phải trong NAND để persist login
+    "$TS_DAEMON" \
+        --state="$TS_STATE" \
+        --socket="$TS_SOCK" \
+        --tun=userspace-networking \
+        --outbound-http-proxy-listen="" \
+        --port=41641 \
+        2>/tmp/tailscaled.log &
+
+    echo $! > "$TS_PID"
+    log "tailscaled started (PID: $!)"
+
+    # Chờ socket ready
+    local retry=0
+    while [ $retry -lt 15 ]; do
+        [ -S "$TS_SOCK" ] && break
+        sleep 1
+        retry=$((retry + 1))
+    done
+
+    if [ ! -S "$TS_SOCK" ]; then
+        log "ERROR: tailscaled socket not ready after 15s"
+        return 1
+    fi
+
+    log "tailscaled socket ready"
+    return 0
+}
+
+# ================================================================
+# Connect/Login tailscale
+# ================================================================
+connect_tailscale() {
+    local AUTHKEY="$(get_nvram ts_authkey)"
+    local HOSTNAME="$(get_nvram ts_hostname)"
+    local EXITNODE="$(get_nvram ts_exitnode)"
+    local SUBNET="$(get_nvram ts_subnet)"
+    local ACCEPT="$(get_nvram ts_accept_routes)"
+    local ALLOW_LAN="$(get_nvram ts_allow_lan)"
+    local SHIELDS="$(get_nvram ts_shields_up)"
+
+    local ARGS="--reset"
+
+    # Auth key (one-time login)
+    [ -n "$AUTHKEY" ] && ARGS="$ARGS --authkey=$AUTHKEY"
+
+    # Hostname
+    [ -n "$HOSTNAME" ] && ARGS="$ARGS --hostname=$HOSTNAME"
+
+    # Exit node
+    [ "$EXITNODE" = "1" ] && ARGS="$ARGS --advertise-exit-node"
+
+    # Subnet routing
+    [ -n "$SUBNET" ] && ARGS="$ARGS --advertise-routes=$SUBNET"
+
+    # Accept routes
+    [ "$ACCEPT" = "1" ] && ARGS="$ARGS --accept-routes" || ARGS="$ARGS --accept-routes=false"
+
+    # Allow LAN khi dùng exit node
+    [ "$ALLOW_LAN" = "1" ] && ARGS="$ARGS --exit-node-allow-lan-access"
+
+    # Shields up
+    [ "$SHIELDS" = "1" ] && ARGS="$ARGS --shields-up"
+
+    log "Connecting: tailscale up $ARGS"
+    "$TS_BIN" --socket="$TS_SOCK" up $ARGS
+
+    if [ $? -eq 0 ]; then
+        log "Tailscale connected OK"
+        # Xóa authkey sau khi login thành công (bảo mật)
+        if [ -n "$AUTHKEY" ]; then
+            nvram unset ts_authkey
+            nvram commit
+            log "Auth key cleared from nvram"
         fi
-    fi
-
-    # Đọc cấu hình được người dùng thiết lập từ NVRAM
-    ACCEPT_DNS=$( [ "$(nvram get tailscale_accept_dns)" = "1" ] && echo "true" || echo "false" )
-    ACCEPT_ROUTES=$( [ "$(nvram get tailscale_accept_routes)" = "1" ] && echo "true" || echo "false" )
-    SUBNETS="$(nvram get tailscale_subnets)"
-    EXITNODE="$(nvram get tailscale_exitnode)"
-    CUSTOM_ARGS="$(nvram get tailscale_args)"
-
-    ARGS="--accept-dns=$ACCEPT_DNS --accept-routes=$ACCEPT_ROUTES"
-
-    if [ -n "$SUBNETS" ]; then
-        ARGS="$ARGS --advertise-routes=$SUBNETS"
-    fi
-
-    if [ "$EXITNODE" = "1" ]; then
-        ARGS="$ARGS --advertise-exit-node"
-    fi
-
-    if [ -n "$CUSTOM_ARGS" ]; then
-        ARGS="$ARGS $CUSTOM_ARGS"
-    fi
-
-    # Khởi chạy Daemon tailscaled ngầm
-    if ! pidof tailscaled > /dev/null; then
-        "$BIN_PATH" --state="$STATE_PATH" --socket="$SOCKET_PATH" > /dev/null 2>&1 &
-        sleep 4
-    fi
-
-    # Khởi chạy giao diện Web chính chủ trên cổng 8989 và kết nối mạng
-    if pidof tailscaled > /dev/null; then
-        "$BIN_DIR/tailscale" --socket="$SOCKET_PATH" web --listen 0.0.0.0:8989 > /dev/null 2>&1 &
-        "$BIN_DIR/tailscale" --socket="$SOCKET_PATH" up $ARGS > /dev/null 2>&1 &
-        logger -t "Tailscale" "Dịch vụ đã được kích hoạt thành công."
     else
-        logger -t "Tailscale" "LỖI: Không thể khởi chạy tiến trình tailscaled."
+        log "ERROR: tailscale up failed"
+        return 1
     fi
 }
 
+# ================================================================
+# Stop
+# ================================================================
 stop_tailscale() {
-    logger -t "Tailscale" "Đang dừng dịch vụ và giải phóng RAM..."
-    killall tailscaled tailscale 2>/dev/null
-    rm -rf "$BIN_DIR"
-    rm -rf "/var/run/tailscale"
-    logger -t "Tailscale" "Đã giải phóng tài nguyên hệ thống hoàn toàn."
+    log "Stopping Tailscale..."
+
+    # Logout giữ state (không cần login lại lần sau)
+    if [ -S "$TS_SOCK" ] && [ -x "$TS_BIN" ]; then
+        "$TS_BIN" --socket="$TS_SOCK" down 2>/dev/null
+    fi
+
+    # Kill daemon
+    if [ -f "$TS_PID" ]; then
+        kill "$(cat $TS_PID)" 2>/dev/null
+        rm -f "$TS_PID"
+    fi
+    pkill tailscaled 2>/dev/null
+    pkill tailscale  2>/dev/null
+
+    # Cleanup RAM
+    rm -rf "$TS_RUN"
+    rm -f "$TS_SOCK" "$TS_LOCK"
+
+    log "Tailscale stopped"
+}
+
+# ================================================================
+# Status
+# ================================================================
+status_tailscale() {
+    if ! pgrep tailscaled >/dev/null 2>&1; then
+        echo "Status: stopped"
+        return 1
+    fi
+
+    if [ ! -S "$TS_SOCK" ]; then
+        echo "Status: daemon running but socket missing"
+        return 1
+    fi
+
+    "$TS_BIN" --socket="$TS_SOCK" status 2>/dev/null
+}
+
+# ================================================================
+# Get Tailscale IP (cho WebUI)
+# ================================================================
+get_ip() {
+    "$TS_BIN" --socket="$TS_SOCK" ip 2>/dev/null | head -1
+}
+
+# ================================================================
+# Main
+# ================================================================
+start_tailscale() {
+    if [ -f "$TS_LOCK" ]; then
+        log "Already running"
+        return
+    fi
+    touch "$TS_LOCK"
+
+    # Binary chưa có → download
+    if [ ! -f "$TS_BIN_GZ" ]; then
+        log "Binary not found, downloading..."
+        download_binary || { rm -f "$TS_LOCK"; return 1; }
+    fi
+
+    # Extract vào RAM
+    extract_binary || { rm -f "$TS_LOCK"; return 1; }
+
+    # Setup system
+    setup_system
+
+    # Start daemon
+    start_daemon || { rm -f "$TS_LOCK"; return 1; }
+
+    # Connect
+    connect_tailscale
+
+    log "Tailscale start complete"
 }
 
 case "$1" in
     start)
-        start_tailscale
+        [ "$(get_nvram ts_enable)" = "1" ] && start_tailscale
         ;;
     stop)
         stop_tailscale
         ;;
     restart)
         stop_tailscale
-        sleep 2
-        start_tailscale
+        sleep 1
+        [ "$(get_nvram ts_enable)" = "1" ] && start_tailscale
+        ;;
+    download)
+        download_binary
+        ;;
+    update)
+        stop_tailscale
+        rm -f "$TS_BIN_GZ"
+        download_binary && start_tailscale
+        ;;
+    status)
+        status_tailscale
+        ;;
+    ip)
+        get_ip
         ;;
     *)
-        echo "Sử dụng: $0 {start|stop|restart}"
+        echo "Usage: $0 {start|stop|restart|download|update|status|ip}"
         ;;
 esac
