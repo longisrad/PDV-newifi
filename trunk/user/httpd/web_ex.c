@@ -260,6 +260,18 @@ sys_script(char *name)
 	{
 		notify_rc("restart_sqm");
 	}
+	else if (strcmp(name, "restart_tailscale") == 0)
+	{
+		notify_rc("restart_tailscale");
+	}
+	else if (strcmp(name, "download_tailscale") == 0)
+	{
+		notify_rc("download_tailscale");
+	}
+	else if (strcmp(name, "update_tailscale") == 0)
+	{
+		notify_rc("update_tailscale");
+	}
 	else if (strstr(scmd, " ") == 0) // no parameter, run script with eval
 	{
 		eval(scmd);

@@ -88,22 +88,7 @@
 			{"koolproxy_mac_x", "14", NULL, FALSE},
 			{"koolproxy_ip_x", "17", NULL, FALSE},
 			{"koolproxy_name_x", "24", NULL, FALSE},
-			{"koolproxy_set", "", NULL, FALSE},
-			{"koolproxy_cpu", "", NULL, FALSE},
-			{"koolproxy_https", "", NULL, FALSE},
-			{"koolproxy_video", "", NULL, FALSE},
-			{"koolproxy_prot", "", NULL, FALSE},
-			{"koolproxy_update", "", NULL, FALSE},
-			{"kp_staticnum_x", "", NULL, FALSE},
-			{"rules_list", "", NULL, FALSE},
-			{"koolproxy_txt_2", "", NULL, FALSE},
-			{"daily_txt_2", "", NULL, FALSE},
-			{"kp_dat_2", "", NULL, FALSE},
-			{"ss_DNS_Redirect_IP", "", NULL, FALSE},
-			{"scripts.koolproxy_rules_list.sh", "File", NULL, FALSE},
-			{"scripts.koolproxy_rules_script.sh", "File", NULL, FALSE},
-			{"scripts.ad_config_script.sh", "File", NULL, FALSE},
-			{"KpIPList", "Group", ARGV((char*)variables_KoolproxyConf_KpIPList, "8", "55", "kp_staticnum_x"), EVM_RESTART_KOOLPROXY},
+			{"koolproxy_ip_road", "24", NULL, FALSE},
 			{0,0,0,0}
 		};
 	
@@ -303,7 +288,9 @@
 			{"scripts.started_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
 			{"scripts.shutdown_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
 			{"scripts.post_wan_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
-			{"scripts.posted_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
+			{"scripts.post_iptables_script.sh", "File", NULL, EVM_RESTART_FIREWALL|EVM_BLOCK_UNSAFE},
+			{"scripts.ez_buttons_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
+			{"scripts.inet_state_script.sh", "File", NULL, FALSE},
 			{0,0,0,0}
 		};
 
@@ -320,8 +307,7 @@
 #endif
 #if defined(APP_SMBD) || defined(APP_FTPD)
 			{"st_max_user", "", NULL, EVM_RESTART_FTPD|EVM_RESTART_SMBD},
-			{"st_samba_user", "", NULL, EVM_RESTART_SMBD},
-			{"st_samba_pass", "", NULL, EVM_RESTART_SMBD},
+			{"acc_num", "", NULL, EVM_RESTART_FTPD|EVM_RESTART_SMBD},
 #endif
 #if defined(APP_FTPD)
 			{"enable_ftp", "", NULL, EVM_RESTART_FTPD},
@@ -435,35 +421,11 @@
 			{"upnp_iport_max", "", NULL, EVM_RESTART_UPNP},
 			{"upnp_eport_min", "", NULL, EVM_RESTART_UPNP},
 			{"upnp_eport_max", "", NULL, EVM_RESTART_UPNP},
-			{"ez_action_short", "", NULL, FALSE},
-			{"ez_action_long", "", NULL, FALSE},
-#if defined (BOARD_GPIO_BTN_FN1)
-			{"fn1_action_short", "", NULL, FALSE},
-			{"fn1_action_long", "", NULL, FALSE},
-#endif
-#if defined (BOARD_GPIO_BTN_FN2)
-			{"fn2_action_short", "", NULL, FALSE},
-			{"fn2_action_long", "", NULL, FALSE},
-#endif
-			{"front_led_all", "", NULL, EVM_RESTART_TWEAKS},
-			{"front_led_wan", "", NULL, EVM_RESTART_TWEAKS},
-			{"front_led_lan", "", NULL, EVM_RESTART_TWEAKS},
-			{"front_led_usb", "", NULL, EVM_RESTART_TWEAKS},
-			{"front_led_wif", "", NULL, EVM_RESTART_TWEAKS},
-			{"front_led_pwr", "", NULL, EVM_RESTART_TWEAKS},
-			{"watchdog_cpu", "", NULL, EVM_RESTART_WDG},
-			{"u2ec_enable", "", NULL, EVM_RESTART_SPOOLER},
-			{"lprd_enable", "", NULL, EVM_RESTART_SPOOLER},
-			{"rawd_enable", "", NULL, EVM_RESTART_SPOOLER},
-			{"help_enable", "", NULL, FALSE},
-			{"reboot_mode", "", NULL, FALSE},
-			{"reboot_schedule_enable", "", NULL, FALSE},
-			{"reboot_schedule", "", NULL, FALSE},
-			{"scripts.start_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
-			{"scripts.started_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
-			{"scripts.shutdown_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
-			{"scripts.post_wan_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
-			{"scripts.posted_script.sh", "File", NULL, EVM_BLOCK_UNSAFE},
+			{"dmz_ip", "", NULL, EVM_RESTART_FIREWALL},
+			{"sp_battle_ips", "", NULL, EVM_RESTART_FIREWALL},
+			{"vts_enable_x", "", NULL, EVM_RESTART_FIREWALL},
+			{"vts_num_x", "", NULL, EVM_RESTART_FIREWALL},
+			{"VSList", "Group", ARGV((char*)variables_IPConnection_VSList, "24", "75", "vts_num_x"), EVM_RESTART_FIREWALL},
 			{0,0,0,0}
 		};
 
@@ -602,6 +564,7 @@
 
 	struct variable variables_LANHostConfig[] = {
 			{"lan_proto_x", "", NULL, EVM_RESTART_LAN},
+			{"lan_dhcpd_x", "", NULL, EVM_RESTART_DHCPD},
 			{"lan_ipaddr", "", NULL, EVM_RESTART_LAN},
 			{"lan_netmask", "", NULL, EVM_RESTART_LAN},
 			{"lan_gateway", "", NULL, EVM_RESTART_LAN},
@@ -893,9 +856,36 @@
 #if defined (USE_WID_5G) && (USE_WID_5G==7615 || USE_WID_5G==7915)
 			{"wl_mumimo", "", NULL, EVM_RESTART_WIFI5},
 #endif
-			{"wl_country_x", "", NULL, EVM_RESTART_WIFI5},
-#if defined (BOARD_HAS_5G_RADIO)
-			{"WLANConfig11a_RBRList", "Group", ARGV((char*)variables_WLANConfig11a_RBRList, "12", "12", "wl_wdsnum_x"), EVM_RESTART_WIFI5},
+			{"wl_country_code", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_stream_tx", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_stream_rx", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_preamble", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_greenap", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_ldpc", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_ssid", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_auth_mode", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_wpa_mode", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_crypto", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_wpa_psk", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_wisp", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_sta_auto", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_enable", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_date_x", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_time_x", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_time2_x", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_ssid", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_closed", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_ap_isolate", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_lan_isolate", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_auth_mode", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_wpa_mode", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_crypto", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_wpa_psk", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_macrule", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_guest_mcs_mode", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_KickStaRssiLow", "", NULL, EVM_RESTART_WIFI5},
+			{"wl_AssocReqRssiThres", "", NULL, EVM_RESTART_WIFI5},
+			{"RBRList", "Group", ARGV((char*)variables_WLANConfig11a_RBRList, "16", "32", "wl_wdsnum_x"), EVM_RESTART_WIFI5},
 #endif
 			{0,0,0,0}
 		};
@@ -1054,23 +1044,15 @@
 			{"ss_method","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
 			{"ss_chdns","",NULL, EVM_RESTART_SHADOWSOCKS},
 			{"ss_own","",NULL, EVM_RESTART_SHADOWSOCKS},
-			{"ss_proto_param_x", "", NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
 			{"ss_local_port","",NULL, EVM_RESTART_SHADOWSOCKS},
 			{"ss_mtu","",NULL, EVM_RESTART_SHADOWSOCKS},
-			{"ss_register_enable", "", NULL, FALSE},
-			{"ss_up_only", "", NULL, FALSE},
-			{"ss_udp_port", "", NULL, FALSE},
-			{"ss_args", "", NULL, FALSE},
-			{"ss_conf", "", NULL, FALSE},
-			{"ss_rules", "", NULL, FALSE},
-			{"ss_keep", "", NULL, FALSE},
-			{"ss_keep_host", "", NULL, FALSE},
-			{"ss_keep_port", "", NULL, FALSE},
-			{"ss_run_mode", "", NULL, FALSE},
-			{"ss_run_time", "", NULL, FALSE},
-			{"ss_run_week", "", NULL, FALSE},
-			{"ss_obfs_x", "", NULL, FALSE},
-			{"ss_obfs_param_x", "", NULL, FALSE},
+			{"ss_router_proxy","",NULL, EVM_RESTART_SHADOWSOCKS},
+			{"ss_lower_port_only","",NULL, EVM_RESTART_SHADOWSOCKS},
+			{"ss_timeout","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
+			{"ss_protocol","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
+			{"ss_proto_param","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
+			{"ss_obfs","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
+			{"ss_obfs_param","",NULL, EVM_RESTART_SHADOWSOCKS|EVM_RESTART_SS_TUNNEL},
 			{"socks5_port","",NULL, EVM_RESTART_SHADOWSOCKS},
 			{"socks5_enable","",NULL, EVM_RESTART_SHADOWSOCKS},
 			{"socks5_wenable","",NULL, EVM_RESTART_SHADOWSOCKS},
@@ -1131,18 +1113,6 @@
     struct variable variables_AdguardHomeConf[] = {
 			{"adg_enable", "", NULL, EVM_RESTART_ADGUARDHOME},
 			{"adg_redirect", "", NULL, EVM_RESTART_ADGUARDHOME},
-			{0,0,0,0}
-	};
-#endif
-
-#if defined(APP_TAILSCALE)
-    struct variable variables_TailscaleConf[] = {
-			{"tailscale_enable", "", NULL, FALSE},
-			{"tailscale_subnets", "", NULL, FALSE},
-			{"tailscale_exitnode", "", NULL, FALSE},
-			{"tailscale_accept_routes", "", NULL, FALSE},
-			{"tailscale_accept_dns", "", NULL, FALSE},
-			{"tailscale_args", "", NULL, FALSE},
 			{0,0,0,0}
 	};
 #endif
@@ -1237,6 +1207,19 @@
 	};
 	
 	/* SQM QoS Conf group */
+
+	struct variable variables_TailscaleConf[] = {
+			{"ts_enable",        "", NULL, FALSE},
+			{"ts_authkey",       "", NULL, FALSE},
+			{"ts_hostname",      "", NULL, FALSE},
+			{"ts_exitnode",      "", NULL, FALSE},
+			{"ts_subnet",        "", NULL, FALSE},
+			{"ts_accept_routes", "", NULL, FALSE},
+			{"ts_allow_lan",     "", NULL, FALSE},
+			{"ts_shields_up",    "", NULL, FALSE},
+			{0, 0, 0, 0}
+	};
+
 	struct variable variables_SQMConf[] = {
 			{"sqm_enable", "", NULL, FALSE},
 			{"sqm_enabled", "", NULL, FALSE},
@@ -1245,6 +1228,8 @@
 			{"sqm_up", "", NULL, FALSE},
 			{"sqm_qdisc", "", NULL, FALSE},
 			{"sqm_overhead", "", NULL, FALSE},
+			{"sqm_preset", "", NULL, FALSE},
+			{"sqm_game_ports", "", NULL, FALSE},
 			{"sqm_preset", "", NULL, FALSE},
 			{"sqm_game_ports", "", NULL, FALSE},
 			{"sqm_settings", "", NULL, FALSE},
@@ -1306,19 +1291,41 @@
 			{"rt_VgaClamp", "", NULL, EVM_RESTART_WIFI2},
 #endif
 #if defined (USE_WID_2G) && (USE_WID_2G==7615 || USE_WID_2G==7915)
-			{"rt_maclist_x", "32", NULL, FALSE},
-			{"rt_macdesc_x", "48", NULL, FALSE},
+			{"rt_turbo_qam", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_airtimefairness", "", NULL, EVM_RESTART_WIFI2},
 #endif
-			{"wl_country_x", "", NULL, EVM_RESTART_WIFI2},
-#if defined (BOARD_HAS_5G_RADIO)
-			{"WLANConfig11b_rt_RBRList", "Group", ARGV((char*)variables_WLANConfig11b_rt_RBRList, "12", "12", "rt_wdsnum_x"), EVM_RESTART_WIFI2},
+			{"rt_country_code", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_stream_tx", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_stream_rx", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_preamble", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_greenap", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_ldpc", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_ssid", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_auth_mode", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_wpa_mode", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_crypto", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_wpa_psk", "", NULL, EVM_RESTART_WIFI2},
+#if !defined(USE_RT3352_MII)
+			{"rt_sta_wisp", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_sta_auto", "", NULL, EVM_RESTART_WIFI2},
 #endif
-			{0,0,0,0}
-		};
-
-	struct variable variables_DeviceSecurity11b_rt_ACLList_v[] = {
-			{"rt_maclist_x", "32", NULL, FALSE},
-			{"rt_macdesc_x", "48", NULL, FALSE},
+			{"rt_guest_enable", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_date_x", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_time_x", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_time2_x", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_ssid", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_closed", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_ap_isolate", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_lan_isolate", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_auth_mode", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_wpa_mode", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_crypto", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_wpa_psk", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_macrule", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_guest_mcs_mode", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_KickStaRssiLow", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_AssocReqRssiThres", "", NULL, EVM_RESTART_WIFI2},
+			{"rt_RBRList", "Group", ARGV((char*)variables_WLANConfig11b_rt_RBRList, "16", "32", "rt_wdsnum_x"), EVM_RESTART_WIFI2},
 			{0,0,0,0}
 		};
 
@@ -1361,9 +1368,6 @@
 #if defined(APP_ADGUARDHOME)
 		{"AdguardHomeConf",		variables_AdguardHomeConf},
 #endif
-#if defined(APP_TAILSCALE)
-		{"TailscaleConf",		variables_TailscaleConf},
-#endif
 #if defined(APP_CADDY)
 		{"CaddyConf",		variables_CaddyConf},
 #endif
@@ -1379,6 +1383,7 @@
 #if defined(APP_SMARTDNS)
 		{"SmartdnsConf",		variables_SmartdnsConf},
 #endif
+		{"TailscaleConf",		variables_TailscaleConf},
 		{"SQMConf",			variables_SQMConf},
 		{"DwebConf",		variables_DwebConf},
 		{"LANGUAGE",			variables_Language},
@@ -1473,9 +1478,6 @@
 #if defined(APP_ADGUARDHOME)
 		{EVM_RESTART_ADGUARDHOME,		EVM_RESTART_ADGUARDHOME,		RCN_RESTART_ADGUARDHOME,	0},
 #endif
-#if defined(APP_TAILSCALE)
-		{EVM_RESTART_TAILSCALE,		EVM_RESTART_TAILSCALE,		RCN_RESTART_TAILSCALE,	0},
-#endif
 #if defined(APP_CADDY)
 		{EVM_RESTART_CADDY,		EVM_RESTART_CADDY,		RCN_RESTART_CADDY,	0},
 #endif
@@ -1500,4 +1502,3 @@
 		{EVM_RESTART_FIREWALL,		EVT_RESTART_FIREWALL,		RCN_RESTART_FIREWALL,	0},
 		{0,0,0,0}
 	};
-
