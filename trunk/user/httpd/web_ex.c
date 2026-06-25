@@ -2554,6 +2554,11 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 #else
 	int found_app_adguardhome = 0;
 #endif
+#if defined(APP_TAILSCALE)
+	int found_app_tailscale = 1;
+#else
+	int found_app_tailscale = 0;
+#endif
 	/* SQM is always built-in */
 	int found_app_sqm = 1;
 #if defined(APP_CADDY)
@@ -2778,6 +2783,7 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		"function found_app_shadowsocks() { return %d;}\n"
 		"function found_app_koolproxy() { return %d;}\n"
 		"function found_app_adguardhome() { return %d;}\n"
+		"function found_app_tailscale() { return %d;}\n"
 		"function found_app_sqm() { return %d;}\n"
 		"function found_app_caddy() { return %d;}\n"
 		"function found_app_adbyby() { return %d;}\n"
@@ -2810,6 +2816,7 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		found_app_shadowsocks,
 		found_app_koolproxy,
 		found_app_adguardhome,
+		found_app_tailscale,
 		found_app_sqm,
 		found_app_caddy,
 		found_app_adbyby,
