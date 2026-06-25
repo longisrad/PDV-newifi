@@ -15,67 +15,88 @@
 #   ts_shields_up  : 0/1 block incoming connections
 #
 
-TS_STORAGE="/etc/storage/tailscale"
-TS_BIN_GZ="$TS_STORAGE/tailscale.tar.gz"
+TS_STORAGE="/etc/storage/tailscale"   # JFFS2 - lưu state
+TS_SQUASH="/usr/share/tailscale"       # squashfs - binary gốc từ build
+TS_BIN_GZ="$TS_STORAGE/tailscale.tar.gz"  # copy từ squashfs sang JFFS2
 TS_STATE="$TS_STORAGE/tailscaled.state"
-TS_RUN="/tmp/tailscale"
+TS_RUN="/tmp/tailscale"                # RAM - extract lúc boot
 TS_BIN="$TS_RUN/tailscale"
 TS_DAEMON="$TS_RUN/tailscaled"
 TS_SOCK="/tmp/tailscaled.sock"
 TS_LOCK="/var/run/tailscale.lock"
 TS_PID="/var/run/tailscaled.pid"
 
-# GitHub repo binary
-TS_REPO="lmq8267/tailscale"
-TS_ARCH="mipsle"
-
 log() { logger -t "Tailscale" "$1"; }
 
 get_nvram() { nvram get "$1"; }
 
 # ================================================================
-# Download / Update binary từ GitHub releases
+# Setup binary: copy từ squashfs → JFFS2 (chỉ lần đầu hoặc update)
 # ================================================================
-download_binary() {
-    log "Checking latest release from $TS_REPO..."
+setup_binary() {
     mkdir -p "$TS_STORAGE"
 
-    # Lấy latest release URL
-    local API_URL="https://api.github.com/repos/$TS_REPO/releases/latest"
+    # Nếu đã có trong JFFS2 thì dùng luôn
+    if [ -f "$TS_BIN_GZ" ] && [ -s "$TS_BIN_GZ" ]; then
+        log "Binary found in storage, using existing"
+        return 0
+    fi
+
+    # Copy từ squashfs (baked in khi build firmware)
+    if [ -f "$TS_SQUASH/tailscale.tar.gz" ]; then
+        log "Copying binary from firmware to storage..."
+        cp "$TS_SQUASH/tailscale.tar.gz" "$TS_BIN_GZ"
+        if [ $? -eq 0 ] && [ -s "$TS_BIN_GZ" ]; then
+            log "Binary copied OK"
+            return 0
+        fi
+    fi
+
+    log "ERROR: No binary found in firmware or storage"
+    return 1
+}
+
+# ================================================================
+# Update binary từ GitHub (tùy chọn, khi user bấm Update)
+# ================================================================
+download_binary() {
+    local REPO="lmq8267/tailscale"
+    local ARCH="mipsle"
+    log "Fetching latest release from $REPO..."
+    mkdir -p "$TS_STORAGE"
+
+    local API_URL="https://api.github.com/repos/$REPO/releases/latest"
     local RELEASE_INFO
-    RELEASE_INFO="$(wget -qO- "$API_URL" 2>/dev/null)"
+    RELEASE_INFO="$(wget -qO- --no-check-certificate "$API_URL" 2>/dev/null)"
 
     if [ -z "$RELEASE_INFO" ]; then
         log "ERROR: Cannot reach GitHub API"
         return 1
     fi
 
-    # Parse download URL cho MIPS
     local DL_URL
-    DL_URL="$(echo "$RELEASE_INFO" | grep "browser_download_url" | \
-              grep "$TS_ARCH" | grep ".tar.gz" | \
-              head -1 | sed 's/.*"browser_download_url": "\(.*\)".*/\1/')"
+    DL_URL="$(echo "$RELEASE_INFO" | grep "browser_download_url" |               grep "$ARCH" | grep ".tar.gz" |               head -1 | sed 's/.*"browser_download_url": "\(.*\)".*/\1/')"
 
     if [ -z "$DL_URL" ]; then
-        log "ERROR: No binary found for arch=$TS_ARCH"
+        log "ERROR: No binary found for arch=$ARCH"
         return 1
     fi
 
     local VERSION
-    VERSION="$(echo "$RELEASE_INFO" | grep '"tag_name"' | head -1 | \
-               sed 's/.*"tag_name": "\(.*\)".*/\1/')"
+    VERSION="$(echo "$RELEASE_INFO" | grep '"tag_name"' | head -1 |                sed 's/.*"tag_name": "\(.*\)".*/\1/')"
 
-    log "Downloading Tailscale $VERSION for $TS_ARCH..."
-    wget -q --no-check-certificate -O "$TS_BIN_GZ" "$DL_URL"
+    log "Downloading $VERSION..."
+    wget -q --no-check-certificate -O "${TS_BIN_GZ}.tmp" "$DL_URL"
 
-    if [ $? -ne 0 ] || [ ! -s "$TS_BIN_GZ" ]; then
+    if [ $? -ne 0 ] || [ ! -s "${TS_BIN_GZ}.tmp" ]; then
         log "ERROR: Download failed"
-        rm -f "$TS_BIN_GZ"
+        rm -f "${TS_BIN_GZ}.tmp"
         return 1
     fi
 
-    log "Download OK: $VERSION"
+    mv "${TS_BIN_GZ}.tmp" "$TS_BIN_GZ"
     echo "$VERSION" > "$TS_STORAGE/version"
+    log "Update OK: $VERSION"
     return 0
 }
 
@@ -279,11 +300,8 @@ start_tailscale() {
     fi
     touch "$TS_LOCK"
 
-    # Binary chưa có → download
-    if [ ! -f "$TS_BIN_GZ" ]; then
-        log "Binary not found, downloading..."
-        download_binary || { rm -f "$TS_LOCK"; return 1; }
-    fi
+    # Setup binary: copy từ squashfs nếu chưa có trong storage
+    setup_binary || { rm -f "$TS_LOCK"; return 1; }
 
     # Extract vào RAM
     extract_binary || { rm -f "$TS_LOCK"; return 1; }
@@ -316,9 +334,10 @@ case "$1" in
         download_binary
         ;;
     update)
+        log "Updating Tailscale binary from GitHub..."
         stop_tailscale
         rm -f "$TS_BIN_GZ"
-        download_binary && start_tailscale
+        download_binary && start_tailscale || log "Update failed"
         ;;
     status)
         status_tailscale
