@@ -15,11 +15,11 @@
 #   ts_shields_up  : 0/1 block incoming connections
 #
 
-TS_STORAGE="/etc/storage/tailscale"   # JFFS2 - lưu state
-TS_SQUASH="/usr/share/tailscale"       # squashfs - binary gốc từ build
-TS_BIN_GZ="$TS_STORAGE/tailscale.tar.gz"  # copy từ squashfs sang JFFS2
+TS_STORAGE="/etc/storage/tailscale"   # JFFS2 - lưu state/config
 TS_STATE="$TS_STORAGE/tailscaled.state"
-TS_RUN="/tmp/tailscale"                # RAM - extract lúc boot
+TS_SRC_BIN="/usr/sbin/tailscale"      # squashfs - binary từ build
+TS_SRC_DAEMON="/usr/sbin/tailscaled"  # squashfs - daemon từ build
+TS_RUN="/tmp/tailscale"               # RAM - copy lúc boot
 TS_BIN="$TS_RUN/tailscale"
 TS_DAEMON="$TS_RUN/tailscaled"
 TS_SOCK="/tmp/tailscaled.sock"
@@ -31,29 +31,25 @@ log() { logger -t "Tailscale" "$1"; }
 get_nvram() { nvram get "$1"; }
 
 # ================================================================
-# Setup binary: copy từ squashfs → JFFS2 (chỉ lần đầu hoặc update)
+# Setup binary: copy từ squashfs (/usr/sbin/) → RAM (/tmp/tailscale/)
 # ================================================================
 setup_binary() {
     mkdir -p "$TS_STORAGE"
+    mkdir -p "$TS_RUN"
 
-    # Nếu đã có trong JFFS2 thì dùng luôn
-    if [ -f "$TS_BIN_GZ" ] && [ -s "$TS_BIN_GZ" ]; then
-        log "Binary found in storage, using existing"
-        return 0
+    # Kiểm tra binary trong squashfs
+    if [ ! -x "$TS_SRC_BIN" ] || [ ! -x "$TS_SRC_DAEMON" ]; then
+        log "ERROR: Binary not found in firmware (/usr/sbin/tailscale*)"
+        return 1
     fi
 
-    # Copy từ squashfs (baked in khi build firmware)
-    if [ -f "$TS_SQUASH/tailscale.tar.gz" ]; then
-        log "Copying binary from firmware to storage..."
-        cp "$TS_SQUASH/tailscale.tar.gz" "$TS_BIN_GZ"
-        if [ $? -eq 0 ] && [ -s "$TS_BIN_GZ" ]; then
-            log "Binary copied OK"
-            return 0
-        fi
-    fi
+    # Copy sang RAM (mỗi lần boot vì /tmp reset)
+    cp "$TS_SRC_BIN"    "$TS_BIN"
+    cp "$TS_SRC_DAEMON" "$TS_DAEMON"
+    chmod +x "$TS_BIN" "$TS_DAEMON"
 
-    log "ERROR: No binary found in firmware or storage"
-    return 1
+    log "Binary copied to RAM: $TS_RUN"
+    return 0
 }
 
 # ================================================================
@@ -100,34 +96,7 @@ download_binary() {
     return 0
 }
 
-# ================================================================
-# Extract binary vào RAM
-# ================================================================
-extract_binary() {
-    mkdir -p "$TS_RUN"
-
-    if [ ! -f "$TS_BIN_GZ" ]; then
-        log "ERROR: No binary found at $TS_BIN_GZ"
-        return 1
-    fi
-
-    tar -xzf "$TS_BIN_GZ" -C "$TS_RUN" 2>/dev/null
-    # Tìm và flatten binary nếu nằm trong subdir
-    find "$TS_RUN" -name "tailscale" -not -path "$TS_BIN" \
-        -exec mv {} "$TS_BIN" \; 2>/dev/null
-    find "$TS_RUN" -name "tailscaled" -not -path "$TS_DAEMON" \
-        -exec mv {} "$TS_DAEMON" \; 2>/dev/null
-
-    chmod +x "$TS_BIN" "$TS_DAEMON" 2>/dev/null
-
-    if [ ! -x "$TS_BIN" ] || [ ! -x "$TS_DAEMON" ]; then
-        log "ERROR: Binary extraction failed"
-        return 1
-    fi
-
-    log "Binary extracted to RAM: $TS_RUN"
-    return 0
-}
+# extract_binary không cần - binary đã extract lúc build
 
 # ================================================================
 # Setup kernel modules và IP forwarding
@@ -259,7 +228,7 @@ stop_tailscale() {
     pkill tailscaled 2>/dev/null
     pkill tailscale  2>/dev/null
 
-    # Cleanup RAM
+    # Cleanup RAM (binary sẽ được copy lại từ squashfs khi start)
     rm -rf "$TS_RUN"
     rm -f "$TS_SOCK" "$TS_LOCK"
 
@@ -300,7 +269,7 @@ start_tailscale() {
     fi
     touch "$TS_LOCK"
 
-    # Setup binary: copy từ squashfs nếu chưa có trong storage
+    # Copy binary từ squashfs sang RAM
     setup_binary || { rm -f "$TS_LOCK"; return 1; }
 
     # Extract vào RAM
