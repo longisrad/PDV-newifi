@@ -424,7 +424,7 @@ if (found_app_sqm()){
 	tabtitle[21] = new Array("", "SQM QoS");
 }
 if (found_app_tailscale()){
-	tabtitle[22] = new Array("", "Tailscale VPN");
+	tabtitle[22] = new Array("", "<#menu5_33#>");
 }
 if (found_app_aliddns()){
 	tabtitle[16] = new Array("", "<#menu5_30#>");
@@ -566,7 +566,7 @@ if (found_app_sqm()){
 } else menuL2_title.push("");
 
 if (found_app_tailscale()){
-	menuL2_title.push("Tailscale VPN");
+	menuL2_title.push("<#menu5_33#>");
 } else menuL2_title.push("");
 
 menuL2_link  = new Array("", tablink[0][1], tablink[1][1], tablink[2][1], tablink[3][1], tablink[4][1], tablink[5][1], tablink[6][1], tablink[7][1], support_2g_radio() ? tablink[8][1] : "Main_EStatus_Content.asp", tablink[9][1]);
