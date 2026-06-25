@@ -56,23 +56,34 @@ jobs:
 
       - name: Download Tailscale binary
         run: |
-          # GuNanOvO/openwrt-tailscale: binary mipsle nhỏ, UPX compressed
+          # GuNanOvO/openwrt-tailscale: mipsle_24kc.apk (thực chất là tar.gz)
           TS_URL=$(curl -s https://api.github.com/repos/GuNanOvO/openwrt-tailscale/releases/latest \
             | grep "browser_download_url" \
             | grep "mipsle" \
+            | grep "24kc" \
             | grep -v "normal" \
             | grep -v "ipk" \
-            | grep ".tar.gz" \
             | head -1 \
             | cut -d '"' -f 4)
           echo "Downloading Tailscale from: $TS_URL"
           if [ -z "$TS_URL" ]; then
-            echo "ERROR: Could not find mipsle binary URL"
-            curl -s https://api.github.com/repos/GuNanOvO/openwrt-tailscale/releases/latest \
-              | grep "browser_download_url"
+            echo "ERROR: Could not find mipsle binary URL, trying softfloat..."
+            TS_URL=$(curl -s https://api.github.com/repos/GuNanOvO/openwrt-tailscale/releases/latest \
+              | grep "browser_download_url" \
+              | grep "mipsle" \
+              | grep -v "ipk" \
+              | head -1 \
+              | cut -d '"' -f 4)
+            echo "Fallback URL: $TS_URL"
+          fi
+          if [ -z "$TS_URL" ]; then
+            echo "ERROR: No mipsle binary found"
             exit 1
           fi
+          # Download và rename thành .tar.gz (apk = tar.gz đổi tên)
           curl -L -o /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz "$TS_URL"
+          # Verify là tar.gz hợp lệ
+          file /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz
           echo "Downloaded: $(du -h /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz | cut -f1)"
 
       - name: Download CA Certificates for AGH
