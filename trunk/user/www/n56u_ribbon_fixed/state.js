@@ -423,6 +423,9 @@ if (found_app_adguardhome()){
 if (found_app_sqm()){
 	tabtitle[21] = new Array("", "SQM QoS");
 }
+if (found_app_tailscale()){
+	tabtitle[22] = new Array("", "Tailscale VPN");
+}
 if (found_app_aliddns()){
 	tabtitle[16] = new Array("", "<#menu5_30#>");
 }else{
@@ -500,6 +503,10 @@ if (found_app_sqm()){
 	sqm_array = new Array("","Advanced_SQM_Content.asp");
 	tablink[21] = (sqm_array);
 }
+if (found_app_tailscale()){
+	ts_array = new Array("","Advanced_Tailscale.asp");
+	tablink[22] = (ts_array);
+}
 if (found_app_wyy()){
 	wyy_array = new Array("","Advanced_wyy.asp");
 	tablink[19] = (wyy_array);
@@ -558,6 +565,10 @@ if (found_app_sqm()){
 	menuL2_title.push("SQM QoS");
 } else menuL2_title.push("");
 
+if (found_app_tailscale()){
+	menuL2_title.push("Tailscale VPN");
+} else menuL2_title.push("");
+
 menuL2_link  = new Array("", tablink[0][1], tablink[1][1], tablink[2][1], tablink[3][1], tablink[4][1], tablink[5][1], tablink[6][1], tablink[7][1], support_2g_radio() ? tablink[8][1] : "Main_EStatus_Content.asp", tablink[9][1]);
 if (found_app_scutclient()){
 	menuL2_link.push(scutclient_array[1]);
@@ -600,6 +611,9 @@ if (found_app_wyy()){
 } else menuL2_link.push("");
 if (found_app_sqm()){
 	menuL2_link.push(sqm_array[1]);
+} else menuL2_link.push("");
+if (found_app_tailscale()){
+	menuL2_link.push(ts_array[1]);
 } else menuL2_link.push("");
 
 //Level 1 Menu in Gateway, Router mode
