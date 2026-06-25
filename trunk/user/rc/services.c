@@ -443,6 +443,30 @@ void restart_adguardhome(void){
 }
 
 #endif
+#if defined(APP_TAILSCALE)
+void stop_tailscale(void){
+	eval("/usr/bin/tailscale.sh","stop");
+}
+
+void start_tailscale(void){
+	int ts_enable = nvram_get_int("ts_enable");
+	if (ts_enable == 1)
+		eval("/usr/bin/tailscale.sh","start");
+}
+
+void restart_tailscale(void){
+	stop_tailscale();
+	start_tailscale();
+}
+
+void download_tailscale(void){
+	eval("/usr/bin/tailscale.sh","download");
+}
+
+void update_tailscale(void){
+	eval("/usr/bin/tailscale.sh","update");
+}
+#endif
 
 /* SQM QoS - HTB + fq_codel */
 void stop_sqm(void){
@@ -819,6 +843,9 @@ doSystem("/usr/sbin/skipd -d /etc/storage/db");
 #if defined(APP_ADGUARDHOME)
 	start_adguardhome();
 #endif
+#if defined(APP_TAILSCALE)
+	start_tailscale();
+#endif
 	start_lltd();
 	start_watchdog_cpu();
 	start_crond();
@@ -868,6 +895,9 @@ stop_services(int stopall)
 #endif
 #if defined(APP_ADGUARDHOME)
 	stop_adguardhome();
+#endif
+#if defined(APP_TAILSCALE)
+	stop_tailscale();
 #endif
 	stop_sqm();
 #if defined(APP_SHADOWSOCKS)

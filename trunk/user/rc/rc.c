@@ -1357,6 +1357,20 @@ handle_notifications(void)
 			restart_adguardhome();
 		}
 #endif
+#if defined(APP_TAILSCALE)
+		else if (strcmp(entry->d_name, "restart_tailscale") == 0)
+		{
+			restart_tailscale();
+		}
+		else if (strcmp(entry->d_name, "download_tailscale") == 0)
+		{
+			download_tailscale();
+		}
+		else if (strcmp(entry->d_name, "update_tailscale") == 0)
+		{
+			update_tailscale();
+		}
+#endif
 		else if (strcmp(entry->d_name, "restart_sqm") == 0)
 		{
 			restart_sqm();

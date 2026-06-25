@@ -561,6 +561,13 @@ void stop_adguardhome(void);
 void start_adguardhome(void);
 void restart_adguardhome(void);
 #endif
+#if defined(APP_TAILSCALE)
+void stop_tailscale(void);
+void start_tailscale(void);
+void restart_tailscale(void);
+void download_tailscale(void);
+void update_tailscale(void);
+#endif
 /* SQM QoS */
 void stop_sqm(void);
 void start_sqm(void);
