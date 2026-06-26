@@ -151,6 +151,18 @@ connect_tailscale() {
 
     if [ $? -eq 0 ]; then
         log "Tailscale connected OK"
+        
+        # Đọc IP và Version trực tiếp từ daemon và lưu vào NVRAM tạm (trên RAM)
+        local IP="$("$TS_BIN" --socket="$TS_SOCK" ip 2>/dev/null | head -1)"
+        local VER="$("$TS_DAEMON" --version 2>/dev/null | head -1)"
+        
+        [ -z "$IP" ] && IP="--"
+        [ -z "$VER" ] && VER="unknown"
+        
+        nvram set ts_status="running"
+        nvram set ts_ip="$IP"
+        nvram set ts_version="$VER"
+
         # Xóa authkey sau khi login thành công
         if [ -n "$AUTHKEY" ]; then
             nvram unset ts_authkey
@@ -159,6 +171,8 @@ connect_tailscale() {
         fi
     else
         log "ERROR: tailscale up failed"
+        nvram set ts_status="failed"
+        nvram set ts_ip="--"
         return 1
     fi
 }
@@ -185,6 +199,10 @@ stop_tailscale() {
     # Cleanup RAM
     rm -rf "$TS_RUN"
     rm -f "$TS_SOCK" "$TS_LOCK"
+
+    # Reset trạng thái đã dừng cho WebUI đọc nhanh
+    nvram set ts_status="stopped"
+    nvram set ts_ip="--"
 
     log "Tailscale stopped"
 }
@@ -222,6 +240,10 @@ start_tailscale() {
         return
     fi
     touch "$TS_LOCK"
+
+    # Set trạng thái kết nối trung gian lúc bắt đầu
+    nvram set ts_status="connecting"
+    nvram set ts_ip="--"
 
     # Copy binary từ squashfs sang RAM
     setup_binary || { rm -f "$TS_LOCK"; return 1; }
