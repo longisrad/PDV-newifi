@@ -4507,6 +4507,63 @@ ej_available_disk_names_and_sizes(int eid, webs_t wp, int argc, char **argv)
 }
 #endif
 
+#if defined(APP_TAILSCALE)
+static int tailscale_status_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	// Sử dụng hàm pids() tối ưu có sẵn của Padavan để check tiến trình cực nhanh
+	if (pids("tailscaled")) {
+		return websWrite(wp, "%s", "running");
+	} else {
+		return websWrite(wp, "%s", "stopped");
+	}
+}
+
+static int tailscale_ip_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	FILE *fstream = NULL;
+	char ip[64];
+	memset(ip, 0, sizeof(ip));
+	
+	// Gọi trực tiếp script lấy IP qua popen
+	fstream = popen("/usr/bin/tailscale.sh ip", "r");
+	if (fstream) {
+		if (fgets(ip, sizeof(ip), fstream)) {
+			// Xóa ký tự xuống dòng (\n, \r) để tránh làm hỏng regex JS
+			ip[strcspn(ip, "\r\n")] = 0;
+		}
+		pclose(fstream);
+	}
+	
+	if (strlen(ip) < 5) {
+		sprintf(ip, "%s", "--");
+	}
+	
+	return websWrite(wp, "%s", ip);
+}
+
+static int tailscale_version_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	FILE *fstream = NULL;
+	char ver[64];
+	memset(ver, 0, sizeof(ver));
+	
+	// Đọc phiên bản từ binary đang chạy trên RAM
+	fstream = popen("/tmp/tailscale/tailscaled --version | head -n 1", "r");
+	if (fstream) {
+		if (fgets(ver, sizeof(ver), fstream)) {
+			ver[strcspn(ver, "\r\n")] = 0;
+		}
+		pclose(fstream);
+	}
+	
+	if (strlen(ver) < 1) {
+		sprintf(ver, "%s", "unknown");
+	}
+	
+	return websWrite(wp, "%s", ver);
+}
+#endif
+
 struct ej_handler ej_handlers[] =
 {
 	{ "nvram_get_x", ej_nvram_get_x},
@@ -4608,6 +4665,11 @@ struct ej_handler ej_handlers[] =
 #if defined (APP_ADBYBY)
 	{ "adbyby_action", adbyby_action_hook},
 	{ "adbyby_status", adbyby_status_hook},
+#endif
+#if defined(APP_TAILSCALE)
+	{ "tailscale_status", tailscale_status_hook },
+	{ "tailscale_ip", tailscale_ip_hook },
+	{ "tailscale_version", tailscale_version_hook },
 #endif
 #if defined (APP_SMARTDNS)
 	{ "smartdns_status", smartdns_status_hook},
