@@ -56,27 +56,24 @@ jobs:
 
       - name: Download Tailscale binary
         run: |
-          # Dùng official Tailscale stable package cho mipsle (MT7621)
-          # pkgs.tailscale.com/stable cung cấp tar.gz chuẩn cho mips
-          TS_VERSION=$(curl -s https://pkgs.tailscale.com/stable/ \
-            | grep -o 'tailscale_[0-9.]*_mipsle.tgz' \
+          # lmq8267/tailscale: binary đơn lẻ (combined tailscale+tailscaled)
+          # Release URL: https://github.com/lmq8267/tailscale/releases/latest
+          TS_URL=$(curl -s https://api.github.com/repos/lmq8267/tailscale/releases/latest \
+            | grep "browser_download_url" \
+            | grep "tailscaled_full" \
             | head -1 \
-            | grep -o '[0-9.]*')
-          if [ -z "$TS_VERSION" ]; then
-            # Fallback: lấy version từ GitHub releases
-            TS_VERSION=$(curl -s https://api.github.com/repos/tailscale/tailscale/releases/latest \
-              | grep '"tag_name"' | head -1 | sed 's/.*"v\([^"]*\)".*//')
-          fi
-          echo "Tailscale version: $TS_VERSION"
-          TS_URL="https://pkgs.tailscale.com/stable/tailscale_${TS_VERSION}_mipsle.tgz"
-          echo "Downloading from: $TS_URL"
-          curl -L -o /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz "$TS_URL"
-          if [ $? -ne 0 ] || [ ! -s /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz ]; then
-            echo "ERROR: Download failed"
+            | cut -d '"' -f 4)
+          echo "Downloading Tailscale from: $TS_URL"
+          if [ -z "$TS_URL" ]; then
+            echo "ERROR: Could not find tailscaled_full URL"
+            curl -s https://api.github.com/repos/lmq8267/tailscale/releases/latest | grep "browser_download_url"
             exit 1
           fi
-          file /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz
-          echo "Downloaded: $(du -h /opt/rt-n56u/trunk/user/tailscale/tailscale_mipsle.tar.gz | cut -f1)"
+          mkdir -p /opt/rt-n56u/trunk/user/tailscale
+          curl -L -o /opt/rt-n56u/trunk/user/tailscale/tailscaled_full "$TS_URL"
+          chmod +x /opt/rt-n56u/trunk/user/tailscale/tailscaled_full
+          file /opt/rt-n56u/trunk/user/tailscale/tailscaled_full
+          echo "Downloaded: $(du -h /opt/rt-n56u/trunk/user/tailscale/tailscaled_full | cut -f1)"
 
       - name: Download CA Certificates for AGH
         run: |
