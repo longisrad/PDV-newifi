@@ -17,11 +17,10 @@
 
 TS_STORAGE="/etc/storage/tailscale"   # JFFS2 - lưu state/config
 TS_STATE="$TS_STORAGE/tailscaled.state"
-TS_SRC_BIN="/usr/sbin/tailscale"      # squashfs - binary từ build
-TS_SRC_DAEMON="/usr/sbin/tailscaled"  # squashfs - daemon từ build
+TS_SRC="/usr/sbin/tailscaled"         # squashfs - combined binary từ build
 TS_RUN="/tmp/tailscale"               # RAM - copy lúc boot
-TS_BIN="$TS_RUN/tailscale"
-TS_DAEMON="$TS_RUN/tailscaled"
+TS_BIN="$TS_RUN/tailscale"           # symlink → tailscaled
+TS_DAEMON="$TS_RUN/tailscaled"       # combined binary (tailscale+tailscaled)
 TS_SOCK="/tmp/tailscaled.sock"
 TS_LOCK="/var/run/tailscale.lock"
 TS_PID="/var/run/tailscaled.pid"
@@ -32,21 +31,24 @@ get_nvram() { nvram get "$1"; }
 
 # ================================================================
 # Setup binary: copy từ squashfs (/usr/sbin/) → RAM (/tmp/tailscale/)
+# lmq8267/tailscale: combined binary (tailscale+tailscaled in one file)
 # ================================================================
 setup_binary() {
     mkdir -p "$TS_STORAGE"
     mkdir -p "$TS_RUN"
 
     # Kiểm tra binary trong squashfs
-    if [ ! -x "$TS_SRC_BIN" ] || [ ! -x "$TS_SRC_DAEMON" ]; then
-        log "ERROR: Binary not found in firmware (/usr/sbin/tailscale*)"
+    if [ ! -x "$TS_SRC" ]; then
+        log "ERROR: Binary not found in firmware (/usr/sbin/tailscaled)"
         return 1
     fi
 
-    # Copy sang RAM (mỗi lần boot vì /tmp reset)
-    cp "$TS_SRC_BIN"    "$TS_BIN"
-    cp "$TS_SRC_DAEMON" "$TS_DAEMON"
-    chmod +x "$TS_BIN" "$TS_DAEMON"
+    # Copy combined binary sang RAM
+    cp "$TS_SRC" "$TS_DAEMON"
+    chmod +x "$TS_DAEMON"
+
+    # Tạo symlink tailscale → tailscaled (combined binary dùng argv[0])
+    ln -sf tailscaled "$TS_BIN"
 
     log "Binary copied to RAM: $TS_RUN"
     return 0
