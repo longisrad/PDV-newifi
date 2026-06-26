@@ -98,8 +98,6 @@ download_binary() {
     return 0
 }
 
-# extract_binary không cần - binary đã extract lúc build
-
 # ================================================================
 # Setup kernel modules và IP forwarding
 # ================================================================
@@ -131,10 +129,11 @@ start_daemon() {
     mkdir -p "$TS_RUN"
 
     # State dir phải trong NAND để persist login
+    # Đã loại bỏ --tun=userspace-networking để Tailscale tự động dùng TUN kernel (tailscale0),
+    # giúp đạt hiệu năng định tuyến LAN tối đa, hỗ trợ Subnet Router và Exit Node hoàn hảo.
     "$TS_DAEMON" \
         --state="$TS_STATE" \
         --socket="$TS_SOCK" \
-        --tun=userspace-networking \
         --outbound-http-proxy-listen="" \
         --port=41641 \
         2>/tmp/tailscaled.log &
@@ -274,10 +273,7 @@ start_tailscale() {
     # Copy binary từ squashfs sang RAM
     setup_binary || { rm -f "$TS_LOCK"; return 1; }
 
-    # Extract vào RAM
-    extract_binary || { rm -f "$TS_LOCK"; return 1; }
-
-    # Setup system
+    # Setup system (TUN, IP Forwarding)
     setup_system
 
     # Start daemon
