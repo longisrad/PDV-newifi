@@ -181,22 +181,27 @@ setup_dscp_classes() {
 
     [ "$PRESET" = "none" ] && return
 
-    # Class 1:20 → EF/AF41 high priority
-    tc class add dev "$IFACE" parent 1:1 classid 1:20 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 1
+    local UP_NUM="${UP_KBIT%kbit}"
+    local GAME_RATE=$(( UP_NUM * 15 / 100 ))kbit
+    local BULK_CEIL=$(( UP_NUM * 70 / 100 ))kbit
+    local NORM_RATE=$(( UP_NUM * 80 / 100 ))kbit
+
+    # 1:20 → EF high priority: guaranteed 15%, burst tối đa 100%
+    tc class add dev "$IFACE" parent 1:1 classid 1:20 htb \
+        rate $GAME_RATE ceil "$UP_KBIT" prio 1
     tc qdisc add dev "$IFACE" parent 1:20 fq_codel ecn
 
-    # Class 1:30 → CS1 bulk low priority  
-    tc class add dev "$IFACE" parent 1:1 classid 1:30 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 3
+    # 1:30 → CS1 bulk: ceil 70%, bị throttle khi game cần
+    tc class add dev "$IFACE" parent 1:1 classid 1:30 htb \
+        rate $GAME_RATE ceil $BULK_CEIL prio 3
     tc qdisc add dev "$IFACE" parent 1:30 fq_codel ecn
 
-    # Streaming có thêm class AF41 medium-high
     if [ "$PRESET" = "streaming" ] || [ "$PRESET" = "wfh" ]; then
-        tc class add dev "$IFACE" parent 1:1 classid 1:25 htb rate "$UP_KBIT" ceil "$UP_KBIT" prio 2
+        tc class add dev "$IFACE" parent 1:1 classid 1:25 htb \
+            rate $NORM_RATE ceil "$UP_KBIT" prio 2
         tc qdisc add dev "$IFACE" parent 1:25 fq_codel ecn
-        # AF41 (0x88) → 1:25
         tc filter add dev "$IFACE" parent 1: protocol ip prio 3 u32 \
             match ip dsfield 0x88 0xfc flowid 1:25
-        # AF31 (0x68) → 1:25
         tc filter add dev "$IFACE" parent 1: protocol ip prio 4 u32 \
             match ip dsfield 0x68 0xfc flowid 1:25
     fi
