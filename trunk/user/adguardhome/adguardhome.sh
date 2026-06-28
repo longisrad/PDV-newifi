@@ -1,11 +1,31 @@
 #!/bin/sh
+#
+# AdGuardHome for Padavan
+# Tối ưu hóa chạy trực tiếp từ ROM (SquashFS)
+#
+
+# Tối ưu hóa bộ nhớ cho Go trên router cấu hình thấp
+export GODEBUG=madvdontneed=1
+export GOGC=15
+export GOMEMLIMIT=45MiB
 
 AGH_STORAGE="/etc/storage/AdGuardHome"
-AGH_BIN="$AGH_STORAGE/AdGuardHome"
 AGH_CFG="$AGH_STORAGE/AdGuardHome.yaml"
 AGH_VERSION_FILE="$AGH_STORAGE/.version"
 
 log() { logger -t "AdGuardHome" "$1"; }
+
+# ================================================================
+# Phát hiện thông minh vị trí của AdGuardHome
+# Ưu tiên ROM (SquashFS) để tiết kiệm RAM, nếu không thấy mới dùng NAND/USB
+# ================================================================
+if [ -x "/usr/bin/AdGuardHome" ]; then
+    AGH_BIN="/usr/bin/AdGuardHome"
+elif [ -x "/usr/sbin/AdGuardHome" ]; then
+    AGH_BIN="/usr/sbin/AdGuardHome"
+else
+    AGH_BIN="$AGH_STORAGE/AdGuardHome"
+fi
 
 change_dns() {
     local mode="$(nvram get adg_redirect)"
@@ -53,6 +73,12 @@ clear_iptable() {
 }
 
 download_agh() {
+    # Nếu binary nằm trong ROM, chặn không tải đè để tránh lỗi phân vùng Read-only
+    if echo "$AGH_BIN" | grep -E -q "^/usr/"; then
+        log "AGH is embedded in ROM, skipped remote downloading."
+        return 0
+    fi
+
     mkdir -p "$AGH_STORAGE"
     log "Fetching latest AGH version info..."
 
@@ -101,7 +127,7 @@ download_agh() {
         chmod +x "$AGH_BIN"
         echo "$LATEST_VER" > "$AGH_VERSION_FILE"
         rm -rf "$TMP_DIR"
-        log "AGH $LATEST_VER installed to NAND OK"
+        log "AGH $LATEST_VER installed to storage OK"
         return 0
     else
         log "ERROR: Binary not found in tarball"
@@ -114,16 +140,16 @@ load_binary() {
     mkdir -p "$AGH_STORAGE"
 
     if [ ! -f "$AGH_BIN" ]; then
-        log "Binary not found in NAND, downloading..."
+        log "Binary not found, downloading..."
         download_agh || {
             log "ERROR: Cannot get AGH binary, aborting"
             nvram set adg_enable=0
             return 1
         }
     else
-        log "Binary found in NAND: $AGH_BIN"
-        # Check update ở background sau 60s, không block boot
-        ( sleep 60 && download_agh ) &
+        log "Binary located: $AGH_BIN"
+        # Chỉ chạy tiến trình update ngầm khi AGH thực sự đang chạy sau 60s
+        ( sleep 60 && [ "$(nvram get adg_enable)" = "1" ] && download_agh ) &
     fi
     return 0
 }
@@ -138,13 +164,18 @@ getconfig() {
 
     mkdir -p /tmp/adguard-log
 
+    # Ép buộc chuyển Stats về RAM và giới hạn lưu trữ tối đa 24 giờ để tránh tràn RAM (/tmp)
     if grep -q '^statistics:' "$AGH_CFG"; then
-        sed -i '/^statistics:/,/^[a-z]/{s|  dir_path: ""|  dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
-        log "Statistics dir set to RAM (/tmp/adguard-log)"
+        sed -i '/^statistics:/,/^[a-z]/{s|dir_path:.*|dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
+        sed -i '/^statistics:/,/^[a-z]/{s|interval:.*|interval: 24h|}' "$AGH_CFG"
+        log "Statistics dir set to RAM (/tmp/adguard-log, interval: 24h)"
     fi
+    
+    # Ép buộc chuyển Query Log về RAM và giới hạn lưu trữ tối đa 24 giờ
     if grep -q '^querylog:' "$AGH_CFG"; then
-        sed -i '/^querylog:/,/^[a-z]/{s|  dir_path: ""|  dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
-        log "Querylog dir set to RAM (/tmp/adguard-log)"
+        sed -i '/^querylog:/,/^[a-z]/{s|dir_path:.*|dir_path: "/tmp/adguard-log"|}' "$AGH_CFG"
+        sed -i '/^querylog:/,/^[a-z]/{s|interval:.*|interval: 24h|}' "$AGH_CFG"
+        log "Querylog dir set to RAM (/tmp/adguard-log, interval: 24h)"
     fi
 
     rm -f "$AGH_STORAGE/data/stats.db"
@@ -199,6 +230,15 @@ start_adg() {
 
 stop_adg() {
     log "Stopping AdGuardHome..."
+
+    # Kill các tiến trình adguardhome.sh khác đang chạy ngầm (tránh bị kẹt update ngầm)
+    local PID_SELF=$$
+    for pid in $(pgrep -f "adguardhome.sh"); do
+        if [ "$pid" != "$PID_SELF" ]; then
+            kill -9 "$pid" 2>/dev/null
+        fi
+    done
+
     killall -9 AdGuardHome 2>/dev/null
     del_dns
     clear_iptable
