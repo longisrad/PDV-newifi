@@ -5,16 +5,7 @@ clean:
 	rm -rf $(THISDIR)/AdGuardHome_extracted
 
 romfs:
-	# Extract binary từ tarball
-	mkdir -p $(THISDIR)/AdGuardHome_extracted
-	tar -xzf $(THISDIR)/AdGuardHome_linux_mipsle_softfloat.tar.gz -C $(THISDIR)/AdGuardHome_extracted 2>/dev/null || true
-	# Copy binary vào firmware (từ extracted hoặc trực tiếp)
-	if [ -f $(THISDIR)/AdGuardHome_extracted/AdGuardHome/AdGuardHome ]; then \
-		$(ROMFSINST) -p +x $(THISDIR)/AdGuardHome_extracted/AdGuardHome/AdGuardHome /usr/bin/AdGuardHome; \
-	elif [ -f $(THISDIR)/AdGuardHome ]; then \
-		$(ROMFSINST) -p +x $(THISDIR)/AdGuardHome /usr/bin/AdGuardHome; \
-	fi
-	# Copy script
+	# Chỉ copy script và CA certs vào firmware
+	# Binary AGH sẽ tự download về NAND lần đầu boot
 	$(ROMFSINST) -p +x $(THISDIR)/adguardhome.sh /usr/bin/adguardhome.sh
-	# Copy CA certificates lưu vĩnh viễn vào hệ thống Padavan
 	$(ROMFSINST) $(THISDIR)/ca-certificates.crt /etc_ro/ca-certificates.crt
