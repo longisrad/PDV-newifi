@@ -214,6 +214,10 @@ stop_tailscale() {
     pkill tailscaled 2>/dev/null
     pkill tailscale  2>/dev/null
 
+    # Xóa jump rules vào ts chains tránh DROP khi chain không còn
+    iptables -D INPUT -j ts-input 2>/dev/null
+    iptables -D FORWARD -j ts-forward 2>/dev/null
+
     rm -rf "$TS_RUN"
     rm -f "$TS_SOCK" "$TS_LOCK"
 
