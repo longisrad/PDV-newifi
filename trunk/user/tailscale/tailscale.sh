@@ -4,16 +4,11 @@
 # Binary lưu NAND: /etc/storage/tailscale/
 # Chạy trên RAM: /tmp/tailscale/
 #
-# NVRAM keys:
-#   ts_enable      : 0/1
-#   ts_authkey     : auth key (one-time, xóa sau login)
-#   ts_hostname    : custom hostname
-#   ts_exitnode    : 0/1 advertise exit node
-#   ts_subnet      : subnet để advertise (e.g. 192.168.123.0/24)
-#   ts_accept_routes: 0/1 accept routes from other nodes
-#   ts_allow_lan   : 0/1 allow LAN access when using exit node
-#   ts_shields_up  : 0/1 block incoming connections
-#
+
+# Tối ưu hóa bộ nhớ cho Go trên router cấu hình thấp (như Newifi 3)
+export GODEBUG=madvdontneed=1
+export GOGC=15
+export GOMEMLIMIT=35MiB
 
 TS_STORAGE="/etc/storage/tailscale"
 TS_STATE="$TS_STORAGE/tailscaled.state"
@@ -197,7 +192,15 @@ connect_tailscale() {
 stop_tailscale() {
     log "Stopping Tailscale..."
 
-    # Stop watchdog trước
+    # 1. Kill sạch tất cả tiến trình tailscale.sh khác đang chạy ngầm (tránh bị kẹt/race condition)
+    local PID_SELF=$$
+    for pid in $(pgrep -f "tailscale.sh"); do
+        if [ "$pid" != "$PID_SELF" ]; then
+            kill -9 "$pid" 2>/dev/null
+        fi
+    done
+
+    # 2. Stop watchdog
     if [ -f "$TS_WATCHDOG_PID" ]; then
         kill "$(cat $TS_WATCHDOG_PID)" 2>/dev/null
         rm -f "$TS_WATCHDOG_PID"
