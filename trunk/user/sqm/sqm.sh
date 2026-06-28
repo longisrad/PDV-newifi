@@ -254,7 +254,7 @@ start_sqm() {
     # EGRESS (upload)
     # -------------------------
     tc qdisc del dev "$IFACE" root 2>/dev/null
-    tc qdisc add dev "$IFACE" root handle 1: htb default 10
+    tc qdisc add dev "$IFACE" root handle 1: htb default 10 r2q 1
     tc class add dev "$IFACE" parent 1: classid 1:1 htb rate "$UP_KBIT" ceil "$UP_KBIT"
 
     setup_htb_classes "$IFACE" "$UP_KBIT" "$PRESET"
@@ -272,7 +272,7 @@ start_sqm() {
         match u32 0 0 action mirred egress redirect dev ifb0
 
     tc qdisc del dev ifb0 root 2>/dev/null
-    tc qdisc add dev ifb0 root handle 1: htb default 10
+    tc qdisc add dev ifb0 root handle 1: htb default 10 r2q 1
     tc class add dev ifb0 parent 1: classid 1:1 htb rate "$DOWN_KBIT" ceil "$DOWN_KBIT"
 
     # IFB cũng có đầy đủ priority classes như egress
