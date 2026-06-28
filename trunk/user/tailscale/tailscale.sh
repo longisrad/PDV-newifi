@@ -15,34 +15,38 @@
 #   ts_shields_up  : 0/1 block incoming connections
 #
 
-TS_STORAGE="/etc/storage/tailscale"
+TS_STORAGE="/etc/storage/tailscale"   # JFFS2 - lưu state/config
 TS_STATE="$TS_STORAGE/tailscaled.state"
-TS_SRC="/usr/sbin/tailscaled"
-TS_RUN="/tmp/tailscale"
-TS_BIN="$TS_RUN/tailscale"
-TS_DAEMON="$TS_RUN/tailscaled"
+TS_SRC="/usr/sbin/tailscaled"         # squashfs - combined binary từ build
+TS_RUN="/tmp/tailscale"               # RAM - copy lúc boot
+TS_BIN="$TS_RUN/tailscale"           # symlink → tailscaled
+TS_DAEMON="$TS_RUN/tailscaled"       # combined binary (tailscale+tailscaled)
 TS_SOCK="/tmp/tailscaled.sock"
 TS_LOCK="/var/run/tailscale.lock"
 TS_PID="/var/run/tailscaled.pid"
-TS_WATCHDOG_PID="/var/run/tailscale_watchdog.pid"
 
 log() { logger -t "Tailscale" "$1"; }
+
 get_nvram() { nvram get "$1"; }
 
 # ================================================================
-# Setup binary
+# Setup binary: copy từ squashfs (/usr/sbin/) → RAM (/tmp/tailscale/)
 # ================================================================
 setup_binary() {
     mkdir -p "$TS_STORAGE"
     mkdir -p "$TS_RUN"
 
+    # Kiểm tra binary trong squashfs
     if [ ! -x "$TS_SRC" ]; then
         log "ERROR: Binary not found in firmware (/usr/sbin/tailscaled)"
         return 1
     fi
 
+    # Copy combined binary sang RAM
     cp "$TS_SRC" "$TS_DAEMON"
     chmod +x "$TS_DAEMON"
+
+    # Tạo symlink tailscale → tailscaled
     ln -sf tailscaled "$TS_BIN"
 
     log "Binary copied to RAM: $TS_RUN"
@@ -53,12 +57,18 @@ setup_binary() {
 # Setup kernel modules và IP forwarding
 # ================================================================
 setup_system() {
+    # TUN device
     mkdir -p /dev/net
     [ ! -c /dev/net/tun ] && mknod /dev/net/tun c 10 200
     chmod 666 /dev/net/tun
+
+    # Load TUN module
     modprobe tun 2>/dev/null
+
+    # IP forwarding
     echo 1 > /proc/sys/net/ipv4/ip_forward
     echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null
+
     log "System setup OK (TUN, ip_forward)"
 }
 
@@ -73,6 +83,7 @@ start_daemon() {
 
     mkdir -p "$TS_RUN"
 
+    # State dir phải trong NAND để persist login
     "$TS_DAEMON" \
         --state="$TS_STATE" \
         --socket="$TS_SOCK" \
@@ -83,6 +94,7 @@ start_daemon() {
     echo $! > "$TS_PID"
     log "tailscaled started (PID: $!)"
 
+    # Chờ socket ready
     local retry=0
     while [ $retry -lt 15 ]; do
         [ -S "$TS_SOCK" ] && break
@@ -100,48 +112,10 @@ start_daemon() {
 }
 
 # ================================================================
-# Watchdog: tự restart nếu tailscaled crash
-# ================================================================
-start_watchdog() {
-    # Kill watchdog cũ nếu có
-    if [ -f "$TS_WATCHDOG_PID" ]; then
-        kill "$(cat $TS_WATCHDOG_PID)" 2>/dev/null
-        rm -f "$TS_WATCHDOG_PID"
-    fi
-
-    (
-        while true; do
-            sleep 30
-            # Chỉ watchdog khi ts_enable=1
-            [ "$(get_nvram ts_enable)" != "1" ] && break
-            if ! pgrep tailscaled >/dev/null 2>&1; then
-                log "Watchdog: tailscaled crashed, restarting..."
-                setup_binary && start_daemon && connect_tailscale
-            fi
-        done
-    ) &
-    echo $! > "$TS_WATCHDOG_PID"
-    log "Watchdog started (PID: $!)"
-}
-
-# ================================================================
 # Connect/Login tailscale
 # ================================================================
 connect_tailscale() {
-    # Nếu đã có state file → đã login rồi, không cần authkey
-    # Nếu chưa có state → chờ NVRAM commit xong tối đa 10s
-    local AUTHKEY=""
-    if [ ! -f "$TS_STATE" ]; then
-        local retry=0
-        while [ $retry -lt 10 ]; do
-            AUTHKEY="$(get_nvram ts_authkey)"
-            [ -n "$AUTHKEY" ] && break
-            sleep 1
-            retry=$((retry + 1))
-        done
-        [ -z "$AUTHKEY" ] && log "Warning: no authkey found after 10s wait"
-    fi
-
+    local AUTHKEY="$(get_nvram ts_authkey)"
     local HOSTNAME="$(get_nvram ts_hostname)"
     local EXITNODE="$(get_nvram ts_exitnode)"
     local SUBNET="$(get_nvram ts_subnet)"
@@ -149,16 +123,27 @@ connect_tailscale() {
     local ALLOW_LAN="$(get_nvram ts_allow_lan)"
     local SHIELDS="$(get_nvram ts_shields_up)"
 
-    # Dùng --reset chỉ khi có authkey (login lần đầu)
-    # Restart bình thường không --reset để giữ config
-    local ARGS=""
-    [ -n "$AUTHKEY" ] && ARGS="--reset --authkey=$AUTHKEY" || ARGS=""
+    local ARGS="--reset"
 
-    [ -n "$HOSTNAME" ]   && ARGS="$ARGS --hostname=$HOSTNAME"
+    # Auth key (one-time login)
+    [ -n "$AUTHKEY" ] && ARGS="$ARGS --authkey=$AUTHKEY"
+
+    # Hostname
+    [ -n "$HOSTNAME" ] && ARGS="$ARGS --hostname=$HOSTNAME"
+
+    # Exit node
     [ "$EXITNODE" = "1" ] && ARGS="$ARGS --advertise-exit-node"
-    [ -n "$SUBNET" ]     && ARGS="$ARGS --advertise-routes=$SUBNET"
-    [ "$ACCEPT" = "1" ]  && ARGS="$ARGS --accept-routes" || ARGS="$ARGS --accept-routes=false"
+
+    # Subnet routing
+    [ -n "$SUBNET" ] && ARGS="$ARGS --advertise-routes=$SUBNET"
+
+    # Accept routes
+    [ "$ACCEPT" = "1" ] && ARGS="$ARGS --accept-routes" || ARGS="$ARGS --accept-routes=false"
+
+    # Allow LAN khi dùng exit node
     [ "$ALLOW_LAN" = "1" ] && ARGS="$ARGS --exit-node-allow-lan-access"
+
+    # Shields up
     [ "$SHIELDS" = "1" ] && ARGS="$ARGS --shields-up"
 
     log "Connecting: tailscale up $ARGS"
@@ -166,13 +151,14 @@ connect_tailscale() {
 
     if [ $? -eq 0 ]; then
         log "Tailscale connected OK"
-
+        
+        # Đọc IP và Version trực tiếp từ daemon và lưu vào NVRAM tạm (trên RAM)
         local IP="$("$TS_BIN" --socket="$TS_SOCK" ip 2>/dev/null | head -1)"
         local VER="$("$TS_DAEMON" --version 2>/dev/null | head -1)"
-
+        
         [ -z "$IP" ] && IP="--"
         [ -z "$VER" ] && VER="unknown"
-
+        
         nvram set ts_status="running"
         nvram set ts_ip="$IP"
         nvram set ts_version="$VER"
@@ -197,16 +183,12 @@ connect_tailscale() {
 stop_tailscale() {
     log "Stopping Tailscale..."
 
-    # Stop watchdog trước
-    if [ -f "$TS_WATCHDOG_PID" ]; then
-        kill "$(cat $TS_WATCHDOG_PID)" 2>/dev/null
-        rm -f "$TS_WATCHDOG_PID"
-    fi
-
+    # Logout giữ state
     if [ -S "$TS_SOCK" ] && [ -x "$TS_BIN" ]; then
         "$TS_BIN" --socket="$TS_SOCK" down 2>/dev/null
     fi
 
+    # Kill daemon
     if [ -f "$TS_PID" ]; then
         kill "$(cat $TS_PID)" 2>/dev/null
         rm -f "$TS_PID"
@@ -214,13 +196,11 @@ stop_tailscale() {
     pkill tailscaled 2>/dev/null
     pkill tailscale  2>/dev/null
 
-    # Xóa jump rules vào ts chains tránh DROP khi chain không còn
-    iptables -D INPUT -j ts-input 2>/dev/null
-    iptables -D FORWARD -j ts-forward 2>/dev/null
-
+    # Cleanup RAM
     rm -rf "$TS_RUN"
     rm -f "$TS_SOCK" "$TS_LOCK"
 
+    # Reset trạng thái đã dừng cho WebUI đọc nhanh
     nvram set ts_status="stopped"
     nvram set ts_ip="--"
 
@@ -244,6 +224,9 @@ status_tailscale() {
     "$TS_BIN" --socket="$TS_SOCK" status 2>/dev/null
 }
 
+# ================================================================
+# Get Tailscale IP (cho WebUI)
+# ================================================================
 get_ip() {
     "$TS_BIN" --socket="$TS_SOCK" ip 2>/dev/null | head -1
 }
@@ -258,14 +241,21 @@ start_tailscale() {
     fi
     touch "$TS_LOCK"
 
+    # Set trạng thái kết nối trung gian lúc bắt đầu
     nvram set ts_status="connecting"
     nvram set ts_ip="--"
 
+    # Copy binary từ squashfs sang RAM
     setup_binary || { rm -f "$TS_LOCK"; return 1; }
+
+    # Setup system
     setup_system
+
+    # Start daemon
     start_daemon || { rm -f "$TS_LOCK"; return 1; }
+
+    # Connect
     connect_tailscale
-    start_watchdog
 
     log "Tailscale start complete"
 }
