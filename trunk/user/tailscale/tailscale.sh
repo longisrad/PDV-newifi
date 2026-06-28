@@ -1,21 +1,17 @@
 #!/bin/sh
 #
 # Tailscale for Padavan (MT7621/MIPS)
-# Binary lưu NAND: /etc/storage/tailscale/
-# Chạy trên RAM: /tmp/tailscale/
+# Tối ưu hóa chạy trực tiếp từ ROM (SquashFS)
 #
 
-# Tối ưu hóa bộ nhớ cho Go trên router cấu hình thấp (như Newifi 3)
+# Tối ưu hóa bộ nhớ cho Go trên router cấu hình thấp
 export GODEBUG=madvdontneed=1
 export GOGC=15
 export GOMEMLIMIT=35MiB
 
 TS_STORAGE="/etc/storage/tailscale"
 TS_STATE="$TS_STORAGE/tailscaled.state"
-TS_SRC="/usr/sbin/tailscaled"
 TS_RUN="/tmp/tailscale"
-TS_BIN="$TS_RUN/tailscale"
-TS_DAEMON="$TS_RUN/tailscaled"
 TS_SOCK="/tmp/tailscaled.sock"
 TS_LOCK="/var/run/tailscale.lock"
 TS_PID="/var/run/tailscaled.pid"
@@ -25,22 +21,30 @@ log() { logger -t "Tailscale" "$1"; }
 get_nvram() { nvram get "$1"; }
 
 # ================================================================
-# Setup binary
+# Setup binary & phát hiện thông minh
 # ================================================================
+TS_DAEMON="/usr/sbin/tailscaled"
+
+# Phát hiện vị trí của Tailscale CLI trong ROM
+if [ -x "/usr/bin/tailscale" ]; then
+    TS_BIN="/usr/bin/tailscale"
+elif [ -x "/usr/sbin/tailscale" ]; then
+    TS_BIN="/usr/sbin/tailscale"
+else
+    # Nếu không tìm thấy CLI trong ROM, tạo symlink tạm thời từ daemon
+    mkdir -p /tmp/tailscale-cli
+    ln -sf "$TS_DAEMON" /tmp/tailscale-cli/tailscale
+    TS_BIN="/tmp/tailscale-cli/tailscale"
+fi
+
 setup_binary() {
     mkdir -p "$TS_STORAGE"
     mkdir -p "$TS_RUN"
 
-    if [ ! -x "$TS_SRC" ]; then
-        log "ERROR: Binary not found in firmware (/usr/sbin/tailscaled)"
+    if [ ! -x "$TS_DAEMON" ]; then
+        log "ERROR: Binary not found in ROM ($TS_DAEMON)"
         return 1
     fi
-
-    cp "$TS_SRC" "$TS_DAEMON"
-    chmod +x "$TS_DAEMON"
-    ln -sf tailscaled "$TS_BIN"
-
-    log "Binary copied to RAM: $TS_RUN"
     return 0
 }
 
@@ -68,6 +72,7 @@ start_daemon() {
 
     mkdir -p "$TS_RUN"
 
+    # Chạy trực tiếp từ ROM (TS_DAEMON) không copy vào RAM
     "$TS_DAEMON" \
         --state="$TS_STATE" \
         --socket="$TS_SOCK" \
@@ -76,7 +81,7 @@ start_daemon() {
         2>/tmp/tailscaled.log &
 
     echo $! > "$TS_PID"
-    log "tailscaled started (PID: $!)"
+    log "tailscaled started directly from ROM (PID: $!)"
 
     local retry=0
     while [ $retry -lt 15 ]; do
@@ -123,8 +128,6 @@ start_watchdog() {
 # Connect/Login tailscale
 # ================================================================
 connect_tailscale() {
-    # Nếu đã có state file → đã login rồi, không cần authkey
-    # Nếu chưa có state → chờ NVRAM commit xong tối đa 10s
     local AUTHKEY=""
     if [ ! -f "$TS_STATE" ]; then
         local retry=0
@@ -144,8 +147,6 @@ connect_tailscale() {
     local ALLOW_LAN="$(get_nvram ts_allow_lan)"
     local SHIELDS="$(get_nvram ts_shields_up)"
 
-    # Dùng --reset chỉ khi có authkey (login lần đầu)
-    # Restart bình thường không --reset để giữ config
     local ARGS=""
     [ -n "$AUTHKEY" ] && ARGS="--reset --authkey=$AUTHKEY" || ARGS=""
 
@@ -172,7 +173,6 @@ connect_tailscale() {
         nvram set ts_ip="$IP"
         nvram set ts_version="$VER"
 
-        # Xóa authkey sau khi login thành công
         if [ -n "$AUTHKEY" ]; then
             nvram unset ts_authkey
             nvram commit
@@ -192,7 +192,7 @@ connect_tailscale() {
 stop_tailscale() {
     log "Stopping Tailscale..."
 
-    # 1. Kill sạch tất cả tiến trình tailscale.sh khác đang chạy ngầm (tránh bị kẹt/race condition)
+    # 1. Kill tất cả các tiến trình tailscale.sh khác đang chạy ngầm (tránh race condition) [1]
     local PID_SELF=$$
     for pid in $(pgrep -f "tailscale.sh"); do
         if [ "$pid" != "$PID_SELF" ]; then
@@ -217,7 +217,6 @@ stop_tailscale() {
     pkill tailscaled 2>/dev/null
     pkill tailscale  2>/dev/null
 
-    # Xóa jump rules vào ts chains tránh DROP khi chain không còn
     iptables -D INPUT -j ts-input 2>/dev/null
     iptables -D FORWARD -j ts-forward 2>/dev/null
 
